@@ -1,0 +1,9 @@
+{
+  "name": "calc-versa-react",
+  "$schema": "../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "frontend/src",
+  "projectType": "application",
+  "tags": [],
+  "// targets": "to see all targets run: nx show project calc-versa-react --web",
+  "targets": {}
+}
