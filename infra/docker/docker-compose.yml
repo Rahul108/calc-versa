@@ -1,0 +1,23 @@
+version: "3.9"
+services:
+  db:
+    image: postgres:15
+    container_name: calcversa-db
+    restart: always
+    environment:
+      POSTGRES_DB: calcversa
+      POSTGRES_USER: calcversa_user
+      POSTGRES_PASSWORD: calcversa_pass
+    ports:
+      - "5432:5432"
+    networks:
+      - calcversa-net
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+volumes:
+  pgdata:
+
+networks:
+  calcversa-net:
+    driver: bridge

@@ -1,0 +1,79 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../../generated/client"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id          String             @id @default(uuid())
+  username    String             @unique
+  first_name  String
+  last_name   String
+  address     String
+  contact_no  String
+  email       String             @unique
+  status      Boolean            @default(true)
+  password    String
+  created_at  DateTime           @default(now())
+  updated_at  DateTime           @updatedAt
+  apps        UsersNAppMapping[]
+  permissions UserPermission[]
+}
+
+model App {
+  id          String             @id @default(uuid())
+  name        String             @unique
+  description String
+  status      Boolean            @default(true)
+  created_at  DateTime           @default(now())
+  updated_at  DateTime           @updatedAt
+  users       UsersNAppMapping[]
+  permissions UserPermission[]
+}
+
+model UsersNAppMapping {
+  id         String   @id @default(uuid())
+  app_id     String
+  user_id    String
+  status     Boolean  @default(true)
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  user User @relation(fields: [user_id], references: [id])
+  app  App  @relation(fields: [app_id], references: [id])
+
+  @@unique([user_id, app_id])
+}
+
+model Permission {
+  id    String           @id @default(uuid())
+  name  String           @unique
+  read  Boolean          @default(false)
+  write Boolean          @default(false)
+  users UserPermission[]
+}
+
+model UserPermission {
+  id            String   @id @default(uuid())
+  user_id       String
+  permission_id String
+  app_id        String
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
+
+  user       User       @relation(fields: [user_id], references: [id])
+  permission Permission @relation(fields: [permission_id], references: [id])
+  app        App        @relation(fields: [app_id], references: [id])
+
+  @@unique([user_id, permission_id, app_id])
+}
