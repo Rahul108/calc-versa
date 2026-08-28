@@ -9,7 +9,7 @@ CalcVersa is a multi-tenant, microservices-powered platform that enables users t
 
 ## How to Get Project Context
 
-All architectural context, design decisions, module details, and operational guides are organized within the `docs/` directory. When analyzing, modifying, or extending this project, refer to the context files in `docs/` according to your specific task:
+All architectural context, design decisions, module details, operational guides, and task histories are organized within the `docs/` directory. When analyzing, modifying, or extending this project, refer to the context files in `docs/` according to your specific task:
 
 ### Context Directory Index
 
@@ -20,7 +20,20 @@ docs/
 │   ├── 0002-polyglot-microservices.md
 │   ├── 0003-account-specific-tool-schema.md
 │   ├── 0004-migrate-from-prisma-to-typeorm.md
-│   └── 0005-ai-assistant-agent-microservice.md
+│   ├── 0005-ai-assistant-agent-microservice.md
+│   └── 0007-integrate-adminjs-management-panel.md
+├── task/                        # Task History & Feature Tracking Directory
+│   ├── task-index.md            # Master task log index table
+│   ├── 0001-initial-project-setup.md
+│   ├── 0002-database-schema-typeorm-migration.md
+│   ├── 0003-ai-assistant-service-gemini.md
+│   ├── 0004-observability-logging-correlation-id.md
+│   ├── 0005-docker-compose-infra.md
+│   ├── 0006-api-gateway-core-apis.md
+│   ├── 0007-user-permissions-apis.md
+│   ├── 0008-admin-management-panel.md
+│   ├── 0009-realtime-formula-compute-engine.md
+│   └── 0010-go-compute-engine-unit-tests.md
 ├── architecture/                # System Architecture & Design Data
 │   ├── overview.md
 │   ├── data-model.md
@@ -46,6 +59,7 @@ docs/
 | If your task involves... | Read these files first | Key codebase references |
 | :--- | :--- | :--- |
 | **Understanding overall architecture** | `docs/architecture/overview.md` | `nx.json`, `package.json` |
+| **Reviewing past completed tasks** | `docs/task/task-index.md` | `docs/task/` |
 | **Database changes & domain models** | `docs/architecture/data-model.md` | `libs/db/src/entities/` |
 | **Adding or modifying API endpoints / Auth** | `docs/modules/api-gateway.md` | `backend/api-gateway-nodejs/src/` |
 | **Heavy math / formula calculation logic** | `docs/modules/compute-service.md` | `backend/compute-service-golang/` |
@@ -68,3 +82,4 @@ docs/
 5. **Preserve Polyglot Microservice Boundaries**: Keep API Gateway logic (NestJS), formula calculation logic (Go), analytics logic (Python), and AI agent guidance (NestJS/Gemini) decoupled within their respective service folders under `backend/`.
 6. **Standardized Observability & Logging**: Every microservice MUST follow the standardized logging pattern documented in `docs/guides/coding-standards-and-observability.md` (structured JSON format, `x-correlation-id` header propagation, request origin tracking, and standardized exception responses).
 7. **Automatic Commit Message Suggestions**: At the end of every response after completing code edits, refactoring, feature implementations, or file updates, **you MUST proactively provide a suggested Conventional Commit message** summarizing the changes made so the user does not need to ask.
+8. **Mandatory Task Directory Tracking**: **STRICT RULE**: Whenever any new task is mentioned, planned, or performed in the codebase, the task details **MUST** be recorded under the `docs/task/` directory and indexed in [`docs/task/task-index.md`](file:///home/aninda-sarker-rahul/Documents/Personal/projects/calc-versa/docs/task/task-index.md).
