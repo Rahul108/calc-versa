@@ -71,7 +71,42 @@ type EvaluateRequest struct {
 	FormulaConfig FormulaConfig          `json:"formulaConfig"`
 }
 
-func main() {
+func ReplaceExponentiationOperators(expr string) string {
+	return strings.ReplaceAll(expr, "^", "**")
+}
+
+func EvaluateFormulaRules(req EvaluateRequest) (map[string]interface{}, error) {
+	parameters := make(map[string]interface{})
+	for k, v := range req.Payload {
+		parameters[k] = v
+	}
+
+	results := make(map[string]interface{})
+
+	for _, rule := range req.FormulaConfig.Rules {
+		if rule.Expression == "" || rule.TargetOutputID == "" {
+			continue
+		}
+
+		exprStr := ReplaceExponentiationOperators(rule.Expression)
+		expression, err := govaluate.NewEvaluableExpression(exprStr)
+		if err != nil {
+			return nil, fmt.Errorf("invalid expression format in rule '%s': %v", rule.TargetOutputID, err)
+		}
+
+		val, err := expression.Evaluate(parameters)
+		if err != nil {
+			return nil, fmt.Errorf("failed to evaluate rule '%s': %v", rule.TargetOutputID, err)
+		}
+
+		results[rule.TargetOutputID] = val
+		parameters[rule.TargetOutputID] = val
+	}
+
+	return results, nil
+}
+
+func SetupApp() *fiber.App {
 	logsDir := filepath.Join(".", "logs")
 	appWriter := NewRotationalFileWriter(logsDir, "app")
 	errorWriter := NewRotationalFileWriter(logsDir, "error")
@@ -149,7 +184,6 @@ func main() {
 		})
 	})
 
-	// Real-Time Dynamic Formula Evaluation Engine Endpoint
 	app.Post("/evaluate", func(c *fiber.Ctx) error {
 		start := time.Now()
 		var req EvaluateRequest
@@ -161,41 +195,13 @@ func main() {
 			})
 		}
 
-		parameters := make(map[string]interface{})
-		for k, v := range req.Payload {
-			parameters[k] = v
-		}
-
-		results := make(map[string]interface{})
-
-		for _, rule := range req.FormulaConfig.Rules {
-			if rule.Expression == "" || rule.TargetOutputID == "" {
-				continue
-			}
-
-			// Replace ^ exponentiation operator with ** if present
-			exprStr := strings.ReplaceAll(rule.Expression, "^", "**")
-
-			expression, err := govaluate.NewEvaluableExpression(exprStr)
-			if err != nil {
-				return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-					"statusCode": 400,
-					"error":      "ExpressionError",
-					"message":    fmt.Sprintf("Invalid expression format in rule '%s': %v", rule.TargetOutputID, err),
-				})
-			}
-
-			val, err := expression.Evaluate(parameters)
-			if err != nil {
-				return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-					"statusCode": 400,
-					"error":      "EvaluationError",
-					"message":    fmt.Sprintf("Failed to evaluate rule '%s': %v", rule.TargetOutputID, err),
-				})
-			}
-
-			results[rule.TargetOutputID] = val
-			parameters[rule.TargetOutputID] = val // Make available to subsequent rules
+		results, err := EvaluateFormulaRules(req)
+		if err != nil {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"statusCode": 400,
+				"error":      "EvaluationError",
+				"message":    err.Error(),
+			})
 		}
 
 		duration := time.Since(start)
@@ -210,6 +216,11 @@ func main() {
 		})
 	})
 
+	return app
+}
+
+func main() {
+	app := SetupApp()
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
