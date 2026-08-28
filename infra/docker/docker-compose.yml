@@ -109,6 +109,21 @@ services:
       - /app/backend/ai-assistant-service-nodejs/dist
 
   # ---------------------------------------------------------------------------
+  # React SPA Frontend Application (Active in Docker)
+  # ---------------------------------------------------------------------------
+  frontend:
+    build:
+      context: ../..
+      dockerfile: infra/docker/calc-versa-react.Dockerfile
+    container_name: calcversa-frontend
+    restart: always
+    ports:
+      - '4200:80' # Host port 4200 serves React Frontend via Nginx
+    depends_on:
+      - api-gateway
+      - ai-assistant-service
+
+  # ---------------------------------------------------------------------------
   # Additional Polyglot Microservices (Uncomment when ready to run)
   # ---------------------------------------------------------------------------
 
