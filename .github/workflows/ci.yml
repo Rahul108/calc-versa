@@ -1,0 +1,27 @@
+name: Compute Engine CI
+
+on:
+  push:
+    branches: [ main, master, "feature/*", develop ]
+  pull_request:
+    branches: [ main, master, "feature/*", develop ]
+
+jobs:
+  test-compute-engine:
+    name: Run Go Compute Engine Unit Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Go Runtime Environment
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          check-latest: true
+
+      - name: Run Go Compute Engine Unit Tests
+        run: |
+          cd backend/compute-service-golang
+          go test -v -cover ./...
