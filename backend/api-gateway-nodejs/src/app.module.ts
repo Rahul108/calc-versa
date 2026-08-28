@@ -2,6 +2,7 @@ import { Module, NestModule, MiddlewareConsumer } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
+import { AuthModule } from './auth/auth.module';
 import { CorrelationIdMiddleware } from './common/middleware/correlation-id.middleware';
 import {
   User,
@@ -31,6 +32,7 @@ import {
       ],
       synchronize: process.env.NODE_ENV !== 'production',
     }),
+    AuthModule,
   ],
   controllers: [AppController],
   providers: [AppService],

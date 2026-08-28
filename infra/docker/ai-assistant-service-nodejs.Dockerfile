@@ -1,28 +1,18 @@
-FROM node:20-alpine AS builder
+FROM node:20-alpine
 
 WORKDIR /app
 
 COPY package*.json ./
 COPY backend/ai-assistant-service-nodejs/package*.json ./backend/ai-assistant-service-nodejs/
 
-RUN cd backend/ai-assistant-service-nodejs && npm install
+WORKDIR /app/backend/ai-assistant-service-nodejs
+RUN npm install --legacy-peer-deps
 
-COPY backend/ai-assistant-service-nodejs ./backend/ai-assistant-service-nodejs
+COPY backend/ai-assistant-service-nodejs ./
 
-RUN cd backend/ai-assistant-service-nodejs && npm run build
+EXPOSE 3001
 
-FROM node:20-alpine AS runner
+ENV PORT=3001
+ENV NODE_ENV=development
 
-WORKDIR /app
-
-COPY --from=builder /app/backend/ai-assistant-service-nodejs/package*.json ./
-RUN npm install --only=production
-
-COPY --from=builder /app/backend/ai-assistant-service-nodejs/dist ./dist
-
-EXPOSE 3004
-
-ENV PORT=3004
-ENV NODE_ENV=production
-
-CMD ["node", "dist/main.js"]
+CMD ["npm", "run", "start:dev"]

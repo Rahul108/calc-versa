@@ -1,19 +1,61 @@
-version: "3.9"
 services:
-  db:
-    image: postgres:15
-    container_name: calcversa-db
+  postgres:
+    image: postgres:16-alpine
+    container_name: calcversa-postgres
     restart: always
     environment:
-      POSTGRES_DB: calcversa
       POSTGRES_USER: calcversa_user
       POSTGRES_PASSWORD: calcversa_pass
+      POSTGRES_DB: calcversa
     ports:
-      - "5432:5432"
-    networks:
-      - calcversa-net
+      - '5435:5432' # Host port 5435 avoids conflict with local PostgreSQL 5432
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U calcversa_user -d calcversa"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: calcversa-rabbitmq
+    restart: always
+    ports:
+      - '5675:5672'   # AMQP protocol
+      - '15675:15672' # Management Dashboard (http://localhost:15675)
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+
+  api-gateway:
+    build:
+      context: ../..
+      dockerfile: infra/docker/api-gateway-nodejs.Dockerfile
+    container_name: calcversa-api-gateway
+    restart: always
+    ports:
+      - '3005:3000' # Swagger UI served at http://localhost:3005/api/docs
+    environment:
+      NODE_ENV: development
+      PORT: 3000
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: calcversa_user
+      DB_PASSWORD: calcversa_pass
+      DB_NAME: calcversa
+      JWT_SECRET: calcversa_secret_jwt_key_2026
+    volumes:
+      # Bind mounts for host live hot-reloading
+      - ../../backend/api-gateway-nodejs:/app/backend/api-gateway-nodejs
+      - ../../libs/db:/app/libs/db
+      # Bind mount for host log file visibility (logs/app-<date>.log and logs/error-<date>.log)
+      - ../../backend/api-gateway-nodejs/logs:/app/backend/api-gateway-nodejs/logs
+      # Anonymous volume preserving container node_modules
+      - /app/backend/api-gateway-nodejs/node_modules
+    depends_on:
+      postgres:
+        condition: service_healthy
 
   ai-assistant-service:
     build:
@@ -22,17 +64,41 @@ services:
     container_name: calcversa-ai-assistant
     restart: always
     ports:
-      - "3004:3004"
+      - '3006:3001'
     environment:
-      PORT: 3004
+      NODE_ENV: development
+      PORT: 3001
       GEMINI_API_KEY: ${GEMINI_API_KEY:-your_gemini_api_key_here}
-      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash}
-    networks:
-      - calcversa-net
+    volumes:
+      - ../../backend/ai-assistant-service-nodejs:/app/backend/ai-assistant-service-nodejs
+      - ../../backend/ai-assistant-service-nodejs/logs:/app/backend/ai-assistant-service-nodejs/logs
+      - /app/backend/ai-assistant-service-nodejs/node_modules
+
+  compute-service:
+    build:
+      context: ../..
+      dockerfile: infra/docker/compute-service-golang.Dockerfile
+    container_name: calcversa-compute-service
+    restart: always
+    ports:
+      - '8085:8080'
+    environment:
+      PORT: 8080
+    volumes:
+      - ../../backend/compute-service-golang:/app
+      - ../../backend/compute-service-golang/logs:/app/logs
+
+  analysis-service:
+    build:
+      context: ../..
+      dockerfile: infra/docker/analysis-service-python.Dockerfile
+    container_name: calcversa-analysis-service
+    restart: always
+    ports:
+      - '8005:8000'
+    volumes:
+      - ../../backend/analysis-service-python:/app
+      - ../../backend/analysis-service-python/logs:/app/logs
 
 volumes:
-  pgdata:
-
-networks:
-  calcversa-net:
-    driver: bridge
+  postgres_data:
