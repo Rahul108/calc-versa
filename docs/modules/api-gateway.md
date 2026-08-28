@@ -32,11 +32,16 @@
    - `GET /records`: Query date-range records for weekly/monthly/yearly reports (`app_id`, `startDate`, `endDate`) (`@RequireAppPermission('read')`).
    - `GET /records/:id`: Retrieve specific calculation record.
    - `DELETE /records/:id`: Delete calculation record.
-5. **Multi-Tenant App Permission Authorization (`AppPermissionGuard`)**:
+5. **User Permission & Access Control Management (`/permissions` & `/apps/:id/permissions`)**:
+   - `GET /permissions/me`: List all calculator tool permission grants for the logged-in user across all tools.
+   - `GET /apps/:id/permissions`: List all user access grants and read/write permission levels for an app (`@RequireAppPermission('write')`).
+   - `PUT /apps/:id/permissions/:userId`: Update user read/write access level for an app (`@RequireAppPermission('write')`).
+   - `DELETE /apps/:id/permissions/:userId`: Revoke a user's access mapping for an app (`@RequireAppPermission('write')`).
+6. **Multi-Tenant App Permission Authorization (`AppPermissionGuard`)**:
    - Uses `@RequireAppPermission('read' | 'write')` decorator.
    - Queries `UsersNAppMapping` and `UserPermission` (`libs/db/src/entities/`) to enforce strict user-to-app data isolation.
    - Denies any cross-tenant CRUD attempt with a `403 Forbidden` response.
-6. **User Action Audit Logging (`LoggingInterceptor`)**:
+7. **User Action Audit Logging (`LoggingInterceptor`)**:
    - Extracted `user.id` and `user.username` are logged in every structured JSON entry output to stdout and `logs/app-<date>.log`.
 
 ---
@@ -47,18 +52,15 @@ backend/api-gateway-nodejs/
 ├── src/
 │   ├── auth/                      # Register, Login, JWT Strategy & Guards
 │   ├── apps/                      # Calculator Tool CRUD, DTOs & Sharing
-│   │   ├── dto/                   # CreateAppDto, UpdateAppDto, ShareAppDto
-│   │   ├── apps.service.ts        # App CRUD & UserPermission management
-│   │   ├── apps.controller.ts     # /apps endpoints with Swagger annotations
-│   │   └── apps.module.ts         # Apps module configuration
 │   ├── records/                   # Submissions Log & Date-Range Querying
-│   │   ├── dto/                   # CreateRecordDto, QueryRecordsDto
-│   │   ├── records.service.ts     # AppRecord CRUD & Date range queries
-│   │   ├── records.controller.ts   # /records endpoints with Swagger annotations
-│   │   └── records.module.ts       # Records module configuration
+│   ├── permissions/               # User Access Control & Permission Grants
+│   │   ├── dto/                   # UpdateUserPermissionDto
+│   │   ├── permissions.service.ts # Access level updates & revocation
+│   │   ├── permissions.controller.ts # /permissions endpoints with Swagger annotations
+│   │   └── permissions.module.ts  # Permissions module configuration
 │   ├── common/                    # Middleware, Interceptors, Filters, FileLogger
 │   ├── app.controller.ts          # Main request handlers
-│   ├── app.module.ts              # Root module importing TypeOrmModule, Auth, Apps, Records
+│   ├── app.module.ts              # Root module importing Auth, Apps, Records, Permissions
 │   └── main.ts                    # Application bootstrap & Swagger UI setup
 ```
 

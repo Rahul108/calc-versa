@@ -5,6 +5,7 @@ import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
 import { AppsModule } from './apps/apps.module';
 import { RecordsModule } from './records/records.module';
+import { PermissionsModule } from './permissions/permissions.module';
 import { CorrelationIdMiddleware } from './common/middleware/correlation-id.middleware';
 import {
   User,
@@ -40,6 +41,7 @@ const defaultPort = process.env.DB_HOST === 'postgres' ? '5432' : '5435';
     AuthModule,
     AppsModule,
     RecordsModule,
+    PermissionsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
