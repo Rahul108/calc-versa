@@ -24,18 +24,18 @@ The project uses an **Nx Monorepo** layout hosting **polyglot microservices** pa
 |             - Account & Tool Permission Enforcement               |
 |             - Tool Definition Metadata Serving                    |
 +-------------------------------------------------------------------+
-           |                                       |
-           | HTTP / gRPC                           | Asynchronous Events
-           v                                       v (RabbitMQ)
-+---------------------------+             +-------------------------+
-|    Go Compute Engine      |             | Python Analysis Service |
-| (compute-service-golang)  |             | (analysis-service-py)   |
-| Fast formula evaluation   |             | Analytics & Batch Work  |
-+---------------------------+             +-------------------------+
-           |                                       |
-           +-------------------+-------------------+
-                               |
-                               v TypeORM (libs/db)
+     |                             |                           |
+     | HTTP                        | Asynchronous Events       | HTTP
+     v                             v (RabbitMQ)                v
++-----------------------+ +-------------------------+ +-----------------------+
+|  Go Compute Engine    | | Python Analysis Service | | AI Assistant Service  |
+| (compute-service-go)  | | (analysis-service-py)   | | (ai-assistant-node) |
+| Fast math evaluation  | | Analytics & Batch Work  | | Gemini API Guidance |
++-----------------------+ +-------------------------+ +-----------------------+
+           |                           |                           |
+           +---------------------------+---------------------------+
+                                       |
+                                       v TypeORM (libs/db)
 +-------------------------------------------------------------------+
 |                      PostgreSQL Database                          |
 |             (Users, Apps, Mappings, Permissions)                  |
@@ -63,7 +63,11 @@ The project uses an **Nx Monorepo** layout hosting **polyglot microservices** pa
 - Asynchronous data processing service written in **Python**.
 - Handles heavy data analytics, statistical modeling, report generation, and background metrics batching.
 
-### 5. Shared Database & Domain Layer (`libs/db/`)
+### 5. AI Assistant / Agent Service (`backend/ai-assistant-service-nodejs/`)
+- Prompt-driven AI agent microservice built with **NestJS** and **Google Gemini API**.
+- Serves operational guidance (`/agent/guide`), prompt-driven data operations (`/agent/operate`), and reporting (`/agent/report`).
+
+### 6. Shared Database & Domain Layer (`libs/db/`)
 - Uses **TypeORM** over **PostgreSQL**.
 - Centralized data entities shared across NestJS services to manage user accounts, calculation tools (`App`), user-app mappings, and permission scopes.
 
@@ -74,3 +78,4 @@ The project uses an **Nx Monorepo** layout hosting **polyglot microservices** pa
 - `docs/architecture/event-driven.md`
 - `docs/adr/0001-monorepo-with-nx.md`
 - `docs/adr/0002-polyglot-microservices.md`
+- `docs/adr/0005-ai-assistant-agent-microservice.md`

@@ -19,7 +19,8 @@ docs/
 │   ├── 0001-monorepo-with-nx.md
 │   ├── 0002-polyglot-microservices.md
 │   ├── 0003-account-specific-tool-schema.md
-│   └── 0004-migrate-from-prisma-to-typeorm.md
+│   ├── 0004-migrate-from-prisma-to-typeorm.md
+│   └── 0005-ai-assistant-agent-microservice.md
 ├── architecture/                # System Architecture & Design Data
 │   ├── overview.md
 │   ├── data-model.md
@@ -31,6 +32,7 @@ docs/
 │   ├── api-gateway.md
 │   ├── compute-service.md
 │   ├── analysis-service.md
+│   ├── ai-assistant-service.md
 │   └── frontend.md
 └── bugfix/                      # Troubleshooting & Issue Resolution
     └── troubleshooting-guide.md
@@ -47,9 +49,10 @@ docs/
 | **Adding or modifying API endpoints / Auth** | `docs/modules/api-gateway.md` | `backend/api-gateway-nodejs/src/` |
 | **Heavy math / formula calculation logic** | `docs/modules/compute-service.md` | `backend/compute-service-golang/` |
 | **Analytics, statistical processing** | `docs/modules/analysis-service.md` | `backend/analysis-service-python/` |
+| **Prompt guidance, AI operations, Gemini API** | `docs/modules/ai-assistant-service.md` | `backend/ai-assistant-service-nodejs/` |
 | **UI components, routing, `/product?id=33`** | `docs/modules/frontend.md` | `frontend/src/app/app.tsx` |
 | **Async messages, events, background jobs** | `docs/architecture/event-driven.md` | `infra/rabbitmq/` |
-| **Understanding past architectural decisions** | `docs/adr/` | `docs/adr/0001-monorepo-with-nx.md`, `docs/adr/0004-migrate-from-prisma-to-typeorm.md` |
+| **Understanding past architectural decisions** | `docs/adr/` | `docs/adr/0001-monorepo-with-nx.md`, `docs/adr/0005-ai-assistant-agent-microservice.md` |
 | **Setting up local environment or debugging** | `docs/guides/getting-started.md`, `docs/bugfix/troubleshooting-guide.md` | `infra/docker/docker-compose.yml` |
 
 ---
@@ -60,4 +63,4 @@ docs/
 2. **Architectural Changes & ADRs**: If any architectural or structural changes are made (e.g., changing ORMs, adding microservices, modifying key protocols), **you MUST document the decision in a new or updated Architectural Decision Record (ADR) under `docs/adr/`**.
 3. **Monorepo Management**: Use Nx commands for building, testing, and linting (`npx nx build <project>`, `npx nx test <project>`).
 4. **Database Schema Integrity**: Any modifications to user permissions or tool definitions must be reflected in `libs/db/src/entities/` using TypeORM decorator annotations and applied via migrations or DataSource sync.
-5. **Preserve Polyglot Microservice Boundaries**: Keep API Gateway logic (NestJS), formula calculation logic (Go), and analytics logic (Python) decoupled within their respective service folders under `backend/`.
+5. **Preserve Polyglot Microservice Boundaries**: Keep API Gateway logic (NestJS), formula calculation logic (Go), analytics logic (Python), and AI agent guidance (NestJS/Gemini) decoupled within their respective service folders under `backend/`.
