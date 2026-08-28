@@ -9,6 +9,7 @@ import {
   UsersNAppMapping,
   Permission,
   UserPermission,
+  AppRecord,
 } from '../../../libs/db/src';
 
 @Module({
@@ -20,7 +21,14 @@ import {
       username: process.env.DB_USER || 'calcversa_user',
       password: process.env.DB_PASSWORD || 'calcversa_pass',
       database: process.env.DB_NAME || 'calcversa',
-      entities: [User, App, UsersNAppMapping, Permission, UserPermission],
+      entities: [
+        User,
+        App,
+        UsersNAppMapping,
+        Permission,
+        UserPermission,
+        AppRecord,
+      ],
       synchronize: process.env.NODE_ENV !== 'production',
     }),
   ],

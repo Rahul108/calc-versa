@@ -5,6 +5,7 @@ import { App } from './entities/App.entity';
 import { UsersNAppMapping } from './entities/UsersNAppMapping.entity';
 import { Permission } from './entities/Permission.entity';
 import { UserPermission } from './entities/UserPermission.entity';
+import { AppRecord } from './entities/AppRecord.entity';
 
 export const AppDataSource = new DataSource({
   type: 'postgres',
@@ -15,7 +16,7 @@ export const AppDataSource = new DataSource({
   database: process.env.DB_NAME || 'calcversa',
   synchronize: process.env.NODE_ENV !== 'production',
   logging: process.env.NODE_ENV === 'development',
-  entities: [User, App, UsersNAppMapping, Permission, UserPermission],
+  entities: [User, App, UsersNAppMapping, Permission, UserPermission, AppRecord],
   migrations: [],
   subscribers: [],
 });
