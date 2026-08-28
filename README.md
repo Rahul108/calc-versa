@@ -1,59 +1,43 @@
 # CalcVersa
 
-> Multi-tenant, polyglot microservices platform enabling accounts to define custom calculation tools and serve account-specific tools under dedicated URLs (e.g. `http://localhost:3005/product?id=33`).
+> Multi-tenant, polyglot microservices platform enabling accounts to define custom calculation tool requirements and serve account-specific calculation tools under dedicated URLs (e.g. `http://localhost:4200/product?id=92b6dc26-9553-41fe-aab1-3fb1866b6916`).
 
 ---
 
-## Recommended Execution: Run via Docker Only
+## 100% Docker-Powered Architecture
 
-No local runtime setup (Node.js, Go, Python, PostgreSQL, RabbitMQ) is required. The entire backend stack runs in Docker Compose with **live code hot-reloading**, **local log file streaming**, and **dedicated non-conflicting host ports**.
+No local runtime setup (Node.js, Go, Python, PostgreSQL, Nginx, RabbitMQ) is required! The entire polyglot backend stack and React SPA frontend run in **Docker Compose** with multi-stage builds and dedicated non-conflicting host ports.
 
-### Start the Platform
+### Start the Platform (Single Command)
 
-Run the following command from the project root:
+Run the following command from the project root to start all microservices and the frontend in Docker:
 
 ```bash
 docker compose -f infra/docker/docker-compose.yml up -d
 ```
 
-To stop all services:
+To stop all containers:
 ```bash
 docker compose -f infra/docker/docker-compose.yml down
 ```
 
 ---
 
-## Database Initialization & Schema Synchronization
+## Local Service Directory & Active Container URLs
 
-### 1. Development Mode (Automatic — Default)
-When running via Docker Compose, `NODE_ENV` is set to `development`, which enables TypeORM **Auto-Synchronization (`synchronize: true`)**.
-- All 6 database tables (`users`, `apps`, `users_n_app_mappings`, `permissions`, `user_permissions`, `app_records`) and indexes are **automatically created** in PostgreSQL on application startup.
-- **No manual migration commands are required.**
-
-### 2. Production Mode (TypeORM CLI Migrations)
-For production environments (`NODE_ENV=production`), TypeORM schema auto-synchronization is disabled. Schema changes are managed via explicit TypeORM migrations:
-
-```bash
-# Generate a new migration based on entity schema changes
-npm --prefix libs/db run migration:generate -- src/migrations/SchemaUpdate
-
-# Run pending migrations against PostgreSQL
-npm --prefix libs/db run migration:run
-```
-
----
-
-## Browsing APIs & Admin Panel Locally
-
-| Service / Interface | Local Host URL | Description |
-| :--- | :--- | :--- |
-| **Admin Management Panel** | **`http://localhost:3005/admin`** | Interactive Admin Panel to inspect, configure, and edit all database entities |
-| **API Gateway & Swagger UI** | **`http://localhost:3005/api/docs`** | Interactive OpenAPI documentation & Auth APIs (`/auth/register`, `/auth/login`) |
-| **AI Assistant Microservice** | **`http://localhost:3006/health`** | AI guidance, operations (`/agent/operate`), and reporting |
-| **Go Compute Engine** | **`http://localhost:8085/health`** | Real-time mathematical formula evaluation engine (<2ms) |
-| **Python Analysis Service** | **`http://localhost:8005/health`** | Statistical data processing & analytics engine |
-| **RabbitMQ Dashboard** | **`http://localhost:15675`** | Event broker management console (`guest`/`guest`) |
-| **PostgreSQL Database** | **`localhost:5435`** | PostgreSQL DB (`calcversa_user` / `calcversa_pass` / `calcversa`) |
+| Application / Microservice | Local Host URL | Container Name | Description |
+| :--- | :--- | :--- | :--- |
+| **React Frontend SPA** | **`http://localhost:4200/`** | `calcversa-frontend` | Production Nginx container serving React SPA |
+| ↳ **Tools Dashboard** | **`http://localhost:4200/`** | `calcversa-frontend` | Manage, search, and launch calculation tools |
+| ↳ **Dynamic Tool Runner** | **`http://localhost:4200/product?id=<id>`** | `calcversa-frontend` | Dedicated product URL with dynamic inputs & <0.2ms Go math execution |
+| ↳ **AI Prompt Copilot** | **`http://localhost:4200/ai-copilot`** | `calcversa-frontend` | Natural language prompt-to-tool generator with Gemini 2.5 Flash |
+| ↳ **Creative Tool Builder** | **`http://localhost:4200/create`** | `calcversa-frontend` | Visual form field constructor with live preview |
+| **Admin Management Panel** | **`http://localhost:3005/admin`** | `calcversa-api-gateway` | Super-Admin management console to inspect & edit database entities |
+| **API Gateway & Swagger UI** | **`http://localhost:3005/api/docs`** | `calcversa-api-gateway` | REST APIs & interactive OpenAPI documentation (`/auth`, `/apps`, `/records`) |
+| **AI Assistant Microservice** | **`http://localhost:3006/agent/feasibility`** | `calcversa-ai-assistant` | AI guidance, safety guardrails, and RAG tool generation |
+| **Go Compute Engine** | **`http://localhost:8085/health`** | `calcversa-compute-service` | Real-time mathematical formula evaluation engine (<0.2ms) |
+| **RabbitMQ Dashboard** | **`http://localhost:15675`** | `calcversa-rabbitmq` | Event broker management console (`guest` / `guest`) |
+| **PostgreSQL Database** | **`localhost:5435`** | `calcversa-postgres` | PostgreSQL DB (`calcversa_user` / `calcversa_pass` / `calcversa`) |
 
 ---
 
@@ -71,22 +55,17 @@ docker exec -it calcversa-postgres psql -U calcversa_user -d calcversa -c "UPDAT
 
 ---
 
-## Running Frontend Locally
+## Database Initialization & Schema Synchronization
 
-```bash
-# Start the React SPA Frontend
-npx nx serve frontend
-```
-
-The frontend will be accessible at `http://localhost:4200` (or `http://localhost:4300`).
+When running via Docker Compose in `development` mode, TypeORM **Auto-Synchronization (`synchronize: true`)** is enabled.
+- All 6 database tables (`users`, `apps`, `users_n_app_mappings`, `permissions`, `user_permissions`, `app_records`) and indexes are **automatically created** in PostgreSQL on startup.
 
 ---
 
-## Local Log File Access
+## Container Log Access
 
-Rotational log files (`app-<date>.log` and `error-<date>.log`) written inside Docker containers stream directly to your local project folders:
+Log files stream directly inside container volumes:
 
 - **API Gateway**: `./backend/api-gateway-nodejs/logs/`
 - **AI Assistant**: `./backend/ai-assistant-service-nodejs/logs/`
 - **Compute Engine**: `./backend/compute-service-golang/logs/`
-- **Analysis Service**: `./backend/analysis-service-python/logs/`
