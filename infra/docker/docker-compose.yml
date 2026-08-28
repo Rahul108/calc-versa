@@ -1,4 +1,7 @@
 services:
+  # ---------------------------------------------------------------------------
+  # Database Infrastructure
+  # ---------------------------------------------------------------------------
   postgres:
     image: postgres:16-alpine
     container_name: calcversa-postgres
@@ -17,6 +20,9 @@ services:
       timeout: 5s
       retries: 5
 
+  # ---------------------------------------------------------------------------
+  # Message Broker Infrastructure
+  # ---------------------------------------------------------------------------
   rabbitmq:
     image: rabbitmq:3-management-alpine
     container_name: calcversa-rabbitmq
@@ -28,6 +34,9 @@ services:
       RABBITMQ_DEFAULT_USER: guest
       RABBITMQ_DEFAULT_PASS: guest
 
+  # ---------------------------------------------------------------------------
+  # Primary API Gateway Microservice (Ready & Active)
+  # ---------------------------------------------------------------------------
   api-gateway:
     build:
       context: ../..
@@ -57,48 +66,52 @@ services:
       postgres:
         condition: service_healthy
 
-  ai-assistant-service:
-    build:
-      context: ../..
-      dockerfile: infra/docker/ai-assistant-service-nodejs.Dockerfile
-    container_name: calcversa-ai-assistant
-    restart: always
-    ports:
-      - '3006:3001'
-    environment:
-      NODE_ENV: development
-      PORT: 3001
-      GEMINI_API_KEY: ${GEMINI_API_KEY:-your_gemini_api_key_here}
-    volumes:
-      - ../../backend/ai-assistant-service-nodejs:/app/backend/ai-assistant-service-nodejs
-      - ../../backend/ai-assistant-service-nodejs/logs:/app/backend/ai-assistant-service-nodejs/logs
-      - /app/backend/ai-assistant-service-nodejs/node_modules
+  # ---------------------------------------------------------------------------
+  # Additional Polyglot Microservices (Uncomment when ready to run)
+  # ---------------------------------------------------------------------------
 
-  compute-service:
-    build:
-      context: ../..
-      dockerfile: infra/docker/compute-service-golang.Dockerfile
-    container_name: calcversa-compute-service
-    restart: always
-    ports:
-      - '8085:8080'
-    environment:
-      PORT: 8080
-    volumes:
-      - ../../backend/compute-service-golang:/app
-      - ../../backend/compute-service-golang/logs:/app/logs
+  # ai-assistant-service:
+  #   build:
+  #     context: ../..
+  #     dockerfile: infra/docker/ai-assistant-service-nodejs.Dockerfile
+  #   container_name: calcversa-ai-assistant
+  #   restart: always
+  #   ports:
+  #     - '3006:3001'
+  #   environment:
+  #     NODE_ENV: development
+  #     PORT: 3001
+  #     GEMINI_API_KEY: ${GEMINI_API_KEY:-your_gemini_api_key_here}
+  #   volumes:
+  #     - ../../backend/ai-assistant-service-nodejs:/app/backend/ai-assistant-service-nodejs
+  #     - ../../backend/ai-assistant-service-nodejs/logs:/app/backend/ai-assistant-service-nodejs/logs
+  #     - /app/backend/ai-assistant-service-nodejs/node_modules
 
-  analysis-service:
-    build:
-      context: ../..
-      dockerfile: infra/docker/analysis-service-python.Dockerfile
-    container_name: calcversa-analysis-service
-    restart: always
-    ports:
-      - '8005:8000'
-    volumes:
-      - ../../backend/analysis-service-python:/app
-      - ../../backend/analysis-service-python/logs:/app/logs
+  # compute-service:
+  #   build:
+  #     context: ../..
+  #     dockerfile: infra/docker/compute-service-golang.Dockerfile
+  #   container_name: calcversa-compute-service
+  #   restart: always
+  #   ports:
+  #     - '8085:8080'
+  #   environment:
+  #     PORT: 8080
+  #   volumes:
+  #     - ../../backend/compute-service-golang:/app
+  #     - ../../backend/compute-service-golang/logs:/app/logs
+
+  # analysis-service:
+  #   build:
+  #     context: ../..
+  #     dockerfile: infra/docker/analysis-service-python.Dockerfile
+  #   container_name: calcversa-analysis-service
+  #   restart: always
+  #   ports:
+  #     - '8005:8000'
+  #   volumes:
+  #     - ../../backend/analysis-service-python:/app
+  #     - ../../backend/analysis-service-python/logs:/app/logs
 
 volumes:
   postgres_data:
