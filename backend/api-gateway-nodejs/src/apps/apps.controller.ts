@@ -14,6 +14,7 @@ import { AppsService } from './apps.service';
 import { CreateAppDto } from './dto/create-app.dto';
 import { UpdateAppDto } from './dto/update-app.dto';
 import { ShareAppDto } from './dto/share-app.dto';
+import { CalculateAppDto } from './dto/calculate-app.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { AppPermissionGuard } from '../auth/guards/app-permission.guard';
 import { RequireAppPermission } from '../auth/decorators/require-permission.decorator';
@@ -76,5 +77,19 @@ export class AppsController {
   @ApiResponse({ status: 200, description: 'Tool access shared successfully' })
   async share(@Param('id') id: string, @Body() dto: ShareAppDto) {
     return this.appsService.share(id, dto);
+  }
+
+  @Post(':id/calculate')
+  @UseGuards(AppPermissionGuard)
+  @RequireAppPermission('read')
+  @ApiOperation({ summary: 'Execute real-time formula computation using Go Compute Engine (<2ms)' })
+  @ApiResponse({ status: 200, description: 'Formula evaluation results computed successfully' })
+  @ApiResponse({ status: 403, description: 'Forbidden - User lacks read permission for this tool' })
+  async calculate(
+    @Request() req: any,
+    @Param('id') id: string,
+    @Body() dto: CalculateAppDto,
+  ) {
+    return this.appsService.calculate(id, req.user.id, dto);
   }
 }

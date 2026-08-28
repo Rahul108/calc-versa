@@ -1,4 +1,9 @@
-import { Injectable, NotFoundException, ConflictException, ForbiddenException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ConflictException,
+  BadRequestException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import {
@@ -7,10 +12,12 @@ import {
   UserPermission,
   Permission,
   User,
+  AppRecord,
 } from '../../../../libs/db/src';
 import { CreateAppDto } from './dto/create-app.dto';
 import { UpdateAppDto } from './dto/update-app.dto';
 import { ShareAppDto } from './dto/share-app.dto';
+import { CalculateAppDto } from './dto/calculate-app.dto';
 
 @Injectable()
 export class AppsService {
@@ -25,6 +32,8 @@ export class AppsService {
     private readonly permissionRepository: Repository<Permission>,
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
+    @InjectRepository(AppRecord)
+    private readonly recordRepository: Repository<AppRecord>,
   ) {}
 
   async create(userId: string, dto: CreateAppDto): Promise<App> {
@@ -43,7 +52,6 @@ export class AppsService {
     });
     const savedApp = await this.appRepository.save(app);
 
-    // Map owner to app
     const mapping = this.mappingRepository.create({
       app_id: savedApp.id,
       user_id: userId,
@@ -51,7 +59,6 @@ export class AppsService {
     });
     await this.mappingRepository.save(mapping);
 
-    // Assign owner read & write permission
     let fullPermission = await this.permissionRepository.findOne({
       where: { read: true, write: true },
     });
@@ -120,7 +127,6 @@ export class AppsService {
       throw new NotFoundException(`User "${dto.targetUsernameOrEmail}" not found`);
     }
 
-    // Ensure mapping exists
     let mapping = await this.mappingRepository.findOne({
       where: { app_id: appId, user_id: targetUser.id },
     });
@@ -164,6 +170,59 @@ export class AppsService {
 
     return {
       message: `Successfully granted permission (read=${wantRead}, write=${wantWrite}) for app "${appId}" to user "${targetUser.username}"`,
+    };
+  }
+
+  async calculate(appId: string, userId: string, dto: CalculateAppDto) {
+    const app = await this.findOne(appId);
+    if (!app.formulaConfig) {
+      throw new BadRequestException(`Calculator tool "${appId}" has no formulaConfig rules configured`);
+    }
+
+    const computeUrl = process.env.COMPUTE_SERVICE_URL || 'http://localhost:8085';
+    let computeRes: any;
+
+    try {
+      const response = await fetch(`${computeUrl}/evaluate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          payload: dto.payload,
+          formulaConfig: app.formulaConfig,
+        }),
+      });
+
+      if (!response.ok) {
+        const errData = await response.json();
+        throw new BadRequestException(errData.message || 'Formula computation failed');
+      }
+
+      computeRes = await response.json();
+    } catch (err: any) {
+      if (err instanceof BadRequestException) throw err;
+      throw new BadRequestException(`Go Compute Engine unavailable (${err.message})`);
+    }
+
+    let savedRecord: AppRecord | null = null;
+    if (dto.saveRecord) {
+      const recordDateStr = new Date().toISOString().split('T')[0];
+      const record = this.recordRepository.create({
+        app_id: appId,
+        user_id: userId,
+        payload: dto.payload,
+        results: computeRes.results,
+        record_date: recordDateStr,
+      });
+      savedRecord = await this.recordRepository.save(record);
+    }
+
+    return {
+      app_id: appId,
+      app_name: app.name,
+      payload: dto.payload,
+      results: computeRes.results,
+      execution_time_ms: computeRes.duration_ms,
+      saved_record: savedRecord,
     };
   }
 }

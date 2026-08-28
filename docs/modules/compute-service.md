@@ -6,34 +6,61 @@
 ## Tech Stack
 - **Language**: Go 1.22+
 - **HTTP Framework**: Fiber (`github.com/gofiber/fiber/v2`)
-- **Port**: `8080` (default)
+- **Expression Engine**: `github.com/Knetic/govaluate`
+- **Host Port**: `8085` (Container Port `8080`)
 
 ---
 
 ## Core Responsibilities
-1. **High-Performance Math Evaluation**: Evaluates custom mathematical expressions, algebraic formulas, and multi-variable equations with low latency.
-2. **Real-time Result Stream**: Computes outputs as users change input parameters on product tool URLs (`/product?id=33`).
-3. **Stateless Scale-Out**: Pure stateless calculation service, allowing easy horizontal scaling in Docker / Kubernetes (`infra/docker/compute-service-golang.Dockerfile`).
+1. **High-Performance Math Evaluation**: Evaluates custom mathematical expressions, algebraic formulas, and multi-variable equations in `<2ms`.
+2. **Dynamic Expression Resolution**: Parses `formulaConfig.rules` dynamically passed from API Gateway (`POST /apps/:id/calculate`).
+3. **Stateless Scale-Out**: Pure stateless calculation service allowing horizontal scaling in Docker (`infra/docker/compute-service-golang.Dockerfile`).
 
 ---
 
-## Internal Code Structure
+## Endpoints
+
+| Method | Path | Description |
+| :--- | :--- | :--- |
+| `GET` | `/health` | Service health check |
+| `POST` | `/evaluate` | Evaluates dynamic formula rules against user input parameters |
+
+### `POST /evaluate` Example Request:
+```json
+{
+  "payload": { "principal": 300000, "annual_rate": 6.5, "term_years": 30 },
+  "formulaConfig": {
+    "rules": [
+      {
+        "targetOutputId": "monthly_payment",
+        "expression": "(principal * (annual_rate / 1200)) / (1 - (1 + (annual_rate / 1200)) ** (-1 * term_years * 12))"
+      }
+    ]
+  }
+}
 ```
-backend/compute-service-golang/
-├── go.mod                     # Go module definitions & dependencies
-├── go.sum                     # Dependency checksum lock
-└── main.go                    # Entrypoint & HTTP route server (Fiber)
+
+### Response (`<2ms` latency):
+```json
+{
+  "status": "success",
+  "results": {
+    "monthly_payment": 1896.204070478898
+  },
+  "duration_ms": 0.19,
+  "service": "compute-service-golang"
+}
 ```
 
 ---
 
-## Performance Considerations
-- Go's lightweight goroutines handle incoming calculation requests concurrently.
-- Expressive math parsing algorithms avoid allocations on critical evaluation paths.
+## Performance & Benchmarks
+- Go goroutines process calculation requests concurrently.
+- Expressive math parsing (`govaluate`) achieves sub-millisecond execution (`~0.19ms`).
 
 ---
 
 ## Related Documents
 - `docs/architecture/overview.md`
 - `docs/adr/0002-polyglot-microservices.md`
-- `backend/compute-service-golang/go.mod`
+- `backend/compute-service-golang/main.go`

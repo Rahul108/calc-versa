@@ -8,6 +8,7 @@ import {
   UserPermission,
   Permission,
   User,
+  AppRecord,
 } from '../../../../libs/db/src';
 
 @Module({
@@ -18,6 +19,7 @@ import {
       UserPermission,
       Permission,
       User,
+      AppRecord,
     ]),
   ],
   controllers: [AppsController],

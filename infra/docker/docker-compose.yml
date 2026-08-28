@@ -54,6 +54,7 @@ services:
       DB_PASSWORD: calcversa_pass
       DB_NAME: calcversa
       JWT_SECRET: calcversa_secret_jwt_key_2026
+      COMPUTE_SERVICE_URL: http://compute-service:8080
     volumes:
       # Bind mounts for host live hot-reloading
       - ../../backend/api-gateway-nodejs:/app/backend/api-gateway-nodejs
@@ -66,6 +67,23 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+
+  # ---------------------------------------------------------------------------
+  # Go Compute Engine Microservice (Active)
+  # ---------------------------------------------------------------------------
+  compute-service:
+    build:
+      context: ../..
+      dockerfile: infra/docker/compute-service-golang.Dockerfile
+    container_name: calcversa-compute-service
+    restart: always
+    ports:
+      - '8085:8080' # Host port 8085 serves Go Compute Engine (http://localhost:8085/health)
+    environment:
+      PORT: 8080
+    volumes:
+      - ../../backend/compute-service-golang:/app
+      - ../../backend/compute-service-golang/logs:/app/logs
 
   # ---------------------------------------------------------------------------
   # Additional Polyglot Microservices (Uncomment when ready to run)
@@ -88,20 +106,6 @@ services:
   #     - ../../backend/ai-assistant-service-nodejs/logs:/app/backend/ai-assistant-service-nodejs/logs
   #     - /app/backend/ai-assistant-service-nodejs/node_modules
   #     - /app/backend/ai-assistant-service-nodejs/dist
-
-  # compute-service:
-  #   build:
-  #     context: ../..
-  #     dockerfile: infra/docker/compute-service-golang.Dockerfile
-  #   container_name: calcversa-compute-service
-  #   restart: always
-  #   ports:
-  #     - '8085:8080'
-  #   environment:
-  #     PORT: 8080
-  #   volumes:
-  #     - ../../backend/compute-service-golang:/app
-  #     - ../../backend/compute-service-golang/logs:/app/logs
 
   # analysis-service:
   #   build:
