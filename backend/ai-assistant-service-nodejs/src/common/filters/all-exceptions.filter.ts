@@ -4,15 +4,13 @@ import {
   ArgumentsHost,
   HttpException,
   HttpStatus,
-  Logger,
 } from '@nestjs/common';
 import { Request, Response } from 'express';
 import { CORRELATION_ID_HEADER } from '../middleware/correlation-id.middleware';
+import { FileLogger } from '../logging/file-logger.util';
 
 @Catch()
 export class AllExceptionsFilter implements ExceptionFilter {
-  private readonly logger = new Logger('AllExceptionsFilter');
-
   catch(exception: unknown, host: ArgumentsHost) {
     const ctx = host.switchToHttp();
     const response = ctx.getResponse<Response>();
@@ -55,8 +53,8 @@ export class AllExceptionsFilter implements ExceptionFilter {
       },
     };
 
-    // Output structured JSON error log
-    console.error(JSON.stringify(errorPayload));
+    // Write to stderr, app-<date>.log, and error-<date>.log
+    FileLogger.logError(errorPayload);
 
     response.status(status).json({
       statusCode: status,

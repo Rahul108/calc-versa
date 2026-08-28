@@ -50,9 +50,11 @@ bin/
 *.out
 *.test
 
-# Logs
+# Logs & Rotational Log Files
 logs/
+**/logs/
 *.log
+*.log.*
 
 # Docker
 docker-compose.override.yml

@@ -1,17 +1,27 @@
 # Coding Standards & Observability Guide
 
 ## Core Principle
-Every microservice in **CalcVersa** (regardless of language or stack: Node.js, Go, Python) **must maintain a consistent, standardized logging pattern and error handling strategy**. This guarantees seamless end-to-end distributed tracing, origin tracking, and unified log ingestion into observability platforms (e.g. Grafana Loki, ELK, Datadog).
+Every microservice in **CalcVersa** (regardless of language or stack: Node.js, Go, Python) **must maintain a consistent, standardized logging pattern, daily rotational file logging, and error handling strategy**. This guarantees seamless end-to-end distributed tracing, origin tracking, local log auditing, and unified log ingestion into observability platforms (e.g. Grafana Loki, ELK, Datadog).
 
 ---
 
-## 1. Structured JSON Logging Requirement
-All log outputs must be rendered in single-line **Structured JSON** format in production.
+## 1. Daily Rotational File Logging (`logs/`)
+Each microservice maintains a local `logs/` folder (strictly ignored in `.gitignore`) and outputs logs to two daily rotating files:
+
+1. **`logs/app-YYYY-MM-DD.log`**: Contains all log entries (`INFO`, `WARN`, `ERROR`, `DEBUG`).
+2. **`logs/error-YYYY-MM-DD.log`**: Contains exclusively `ERROR` level log entries.
+
+Additionally, structured JSON logs must continue streaming to `stdout`/`stderr` for container orchestration (Docker / Kubernetes).
+
+---
+
+## 2. Structured JSON Logging Requirement
+All log outputs (console and log files) must be rendered in single-line **Structured JSON** format.
 
 ### Standard Log Schema
 ```json
 {
-  "timestamp": "2026-08-28T19:24:00.123Z",
+  "timestamp": "2026-08-28T19:33:00.123Z",
   "level": "INFO|WARN|ERROR|DEBUG",
   "service": "<service-name>",
   "correlation_id": "<uuid-or-inherited-id>",
@@ -33,7 +43,7 @@ All log outputs must be rendered in single-line **Structured JSON** format in pr
 
 ---
 
-## 2. Distributed Correlation ID Propagation (`x-correlation-id`)
+## 3. Distributed Correlation ID Propagation (`x-correlation-id`)
 1. **API Gateway Responsibility**: The API Gateway (`backend/api-gateway-nodejs`) inspects every incoming HTTP request for the header `x-correlation-id` (or `x-request-id`).
    - If missing, the API Gateway **generates a new UUID v4**.
    - If present, it preserves the existing ID.
@@ -42,14 +52,14 @@ All log outputs must be rendered in single-line **Structured JSON** format in pr
 
 ---
 
-## 3. Request Origin & Error Origin Tracking
+## 4. Request Origin & Error Origin Tracking
 Logs must explicitly state:
 - **Where the request originated**: `origin_ip` and `user_agent`.
 - **Where the error occurred**: `service` name, `file/module` name, and `stack` trace.
 
 ---
 
-## 4. Standardized Error Response Format
+## 5. Standardized Error Response Format
 All HTTP microservices must format unhandled errors using this JSON payload structure:
 
 ```json
@@ -60,19 +70,20 @@ All HTTP microservices must format unhandled errors using this JSON payload stru
   "service": "ai-assistant-service-nodejs",
   "path": "/agent/guide",
   "correlationId": "c7a2b9f0-1234-4567-89ab-cdef01234567",
-  "timestamp": "2026-08-28T19:24:00.123Z"
+  "timestamp": "2026-08-28T19:33:00.123Z"
 }
 ```
 
 ---
 
-## 5. Technology Stack Observability Reference
+## 6. Technology Stack Rotational Logging Reference
 
-| Technology | Logging Library / Mechanism | Middleware / Interceptor |
-| :--- | :--- | :--- |
-| **Node.js (NestJS)** | NestJS `Logger` + Custom `LoggingInterceptor` | `CorrelationIdMiddleware` + `AllExceptionsFilter` |
-| **Go (Fiber)** | Go 1.22 standard `log/slog` (JSON handler) | Custom Fiber Middleware for `x-correlation-id` |
-| **Python (FastAPI)** | `logging` with JSON Formatter / `structlog` | FastAPI Middleware for `x-correlation-id` |
+| Microservice | Technology | Console Output | Rotational Log Files (`logs/`) |
+| :--- | :--- | :--- | :--- |
+| **`api-gateway-nodejs`** | Node.js / NestJS | JSON `stdout`/`stderr` | `FileLogger` -> `app-YYYY-MM-DD.log` & `error-YYYY-MM-DD.log` |
+| **`ai-assistant-service-nodejs`** | Node.js / NestJS | JSON `stdout`/`stderr` | `FileLogger` -> `app-YYYY-MM-DD.log` & `error-YYYY-MM-DD.log` |
+| **`compute-service-golang`** | Go 1.22 / Fiber | JSON `stdout` | `RotationalFileWriter` -> `app-YYYY-MM-DD.log` & `error-YYYY-MM-DD.log` |
+| **`analysis-service-python`** | Python / FastAPI | JSON `stdout` | `TimedRotatingFileHandler` -> `app-YYYY-MM-DD.log` & `error-YYYY-MM-DD.log` |
 
 ---
 

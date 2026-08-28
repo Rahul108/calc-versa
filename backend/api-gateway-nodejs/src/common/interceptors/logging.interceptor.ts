@@ -3,16 +3,14 @@ import {
   NestInterceptor,
   ExecutionContext,
   CallHandler,
-  Logger,
 } from '@nestjs/common';
 import { Observable } from 'rxjs';
 import { tap } from 'rxjs/operators';
 import { CORRELATION_ID_HEADER } from '../middleware/correlation-id.middleware';
+import { FileLogger } from '../logging/file-logger.util';
 
 @Injectable()
 export class LoggingInterceptor implements NestInterceptor {
-  private readonly logger = new Logger('HTTP');
-
   intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
     const httpContext = context.switchToHttp();
     const request = httpContext.getRequest();
@@ -45,8 +43,8 @@ export class LoggingInterceptor implements NestInterceptor {
           message: `${method} ${originalUrl} ${statusCode} - ${durationMs}ms`,
         };
 
-        // Output structured JSON log
-        console.log(JSON.stringify(logPayload));
+        // Write to stdout and app-<date>.log
+        FileLogger.logInfo(logPayload);
       }),
     );
   }
