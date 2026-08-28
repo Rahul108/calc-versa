@@ -86,26 +86,31 @@ services:
       - ../../backend/compute-service-golang/logs:/app/logs
 
   # ---------------------------------------------------------------------------
+  # AI Assistant Microservice (Active)
+  # ---------------------------------------------------------------------------
+  ai-assistant-service:
+    build:
+      context: ../..
+      dockerfile: infra/docker/ai-assistant-service-nodejs.Dockerfile
+    container_name: calcversa-ai-assistant
+    restart: always
+    ports:
+      - '3006:3001' # Host port 3006 serves AI Assistant API
+    environment:
+      NODE_ENV: development
+      PORT: 3001
+      API_GATEWAY_URL: http://api-gateway:3000
+    env_file:
+      - ../../backend/ai-assistant-service-nodejs/.env
+    volumes:
+      - ../../backend/ai-assistant-service-nodejs:/app/backend/ai-assistant-service-nodejs
+      - ../../backend/ai-assistant-service-nodejs/logs:/app/backend/ai-assistant-service-nodejs/logs
+      - /app/backend/ai-assistant-service-nodejs/node_modules
+      - /app/backend/ai-assistant-service-nodejs/dist
+
+  # ---------------------------------------------------------------------------
   # Additional Polyglot Microservices (Uncomment when ready to run)
   # ---------------------------------------------------------------------------
-
-  # ai-assistant-service:
-  #   build:
-  #     context: ../..
-  #     dockerfile: infra/docker/ai-assistant-service-nodejs.Dockerfile
-  #   container_name: calcversa-ai-assistant
-  #   restart: always
-  #   ports:
-  #     - '3006:3001'
-  #   environment:
-  #     NODE_ENV: development
-  #     PORT: 3001
-  #     GEMINI_API_KEY: ${GEMINI_API_KEY:-your_gemini_api_key_here}
-  #   volumes:
-  #     - ../../backend/ai-assistant-service-nodejs:/app/backend/ai-assistant-service-nodejs
-  #     - ../../backend/ai-assistant-service-nodejs/logs:/app/backend/ai-assistant-service-nodejs/logs
-  #     - /app/backend/ai-assistant-service-nodejs/node_modules
-  #     - /app/backend/ai-assistant-service-nodejs/dist
 
   # analysis-service:
   #   build:
