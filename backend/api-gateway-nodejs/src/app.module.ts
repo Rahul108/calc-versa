@@ -3,6 +3,8 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
+import { AppsModule } from './apps/apps.module';
+import { RecordsModule } from './records/records.module';
 import { CorrelationIdMiddleware } from './common/middleware/correlation-id.middleware';
 import {
   User,
@@ -36,6 +38,8 @@ const defaultPort = process.env.DB_HOST === 'postgres' ? '5432' : '5435';
       logging: process.env.NODE_ENV === 'development',
     }),
     AuthModule,
+    AppsModule,
+    RecordsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
