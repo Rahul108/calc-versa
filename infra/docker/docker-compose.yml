@@ -60,8 +60,9 @@ services:
       - ../../libs/db:/app/libs/db
       # Bind mount for host log file visibility (logs/app-<date>.log and logs/error-<date>.log)
       - ../../backend/api-gateway-nodejs/logs:/app/backend/api-gateway-nodejs/logs
-      # Anonymous volume preserving container node_modules
+      # Anonymous volumes preserving container node_modules & dist from root permission locks
       - /app/backend/api-gateway-nodejs/node_modules
+      - /app/backend/api-gateway-nodejs/dist
     depends_on:
       postgres:
         condition: service_healthy
@@ -86,6 +87,7 @@ services:
   #     - ../../backend/ai-assistant-service-nodejs:/app/backend/ai-assistant-service-nodejs
   #     - ../../backend/ai-assistant-service-nodejs/logs:/app/backend/ai-assistant-service-nodejs/logs
   #     - /app/backend/ai-assistant-service-nodejs/node_modules
+  #     - /app/backend/ai-assistant-service-nodejs/dist
 
   # compute-service:
   #   build:

@@ -17,4 +17,4 @@ EXPOSE 3000
 ENV PORT=3000
 ENV NODE_ENV=development
 
-CMD ["npm", "run", "start:dev"]
+CMD ["sh", "-c", "npm run build && npm run start:dev"]

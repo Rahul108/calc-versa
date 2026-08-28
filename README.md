@@ -23,6 +23,26 @@ docker compose -f infra/docker/docker-compose.yml down
 
 ---
 
+## Database Initialization & Schema Synchronization
+
+### 1. Development Mode (Automatic — Default)
+When running via Docker Compose, `NODE_ENV` is set to `development`, which enables TypeORM **Auto-Synchronization (`synchronize: true`)**.
+- All 6 database tables (`users`, `apps`, `users_n_app_mappings`, `permissions`, `user_permissions`, `app_records`) and indexes are **automatically created** in PostgreSQL on application startup.
+- **No manual migration commands are required.**
+
+### 2. Production Mode (TypeORM CLI Migrations)
+For production environments (`NODE_ENV=production`), TypeORM schema auto-synchronization is disabled. Schema changes are managed via explicit TypeORM migrations:
+
+```bash
+# Generate a new migration based on entity schema changes
+npm --prefix libs/db run migration:generate -- src/migrations/SchemaUpdate
+
+# Run pending migrations against PostgreSQL
+npm --prefix libs/db run migration:run
+```
+
+---
+
 ## Browsing APIs & Services Locally
 
 | Service / Interface | Local Host URL | Description |
