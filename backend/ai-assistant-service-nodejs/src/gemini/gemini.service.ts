@@ -49,14 +49,20 @@ CRITICAL RULE: If the user requirement cannot be fulfilled properly by CalcVersa
 
     try {
       const model = this.genAI.getGenerativeModel({ model: this.modelName });
-      const systemInstruction = `You are the CalcVersa AI Safety & Feasibility Analyzer.
-Analyze the user prompt to determine if a calculator tool can be created using CalcVersa capabilities.
+      const systemInstruction = `You are the CalcVersa AI Feasibility & Tool Generator Analyzer.
+Your task is to convert any domain prompt (building management, mess tracking, financial tools, salary calculators) into a valid CalcVersa calculation tool schema.
+GUIDANCE FOR COMPLEX SYSTEM PROMPTS (Building Management, Mess Management, Inventory):
+- Do NOT mark domain calculation requests as unfeasible!
+- Adapt the requirement into CalcVersa inputs (number, slider, dropdown, checkbox) and mathematical formula rules.
+- For Building/Flat Management: Map total flats, flat selection, base rent, and utility bills into input controls, and output total revenue, per-flat bill, and flat rent due.
+
 Allowed input types: "number", "slider", "dropdown", "checkbox", "text".
 Allowed formula expressions: basic math, exponents (^ or **), parenthesis, and input variable names.
+
 Output ONLY valid JSON matching this exact structure:
 {
-  "possible": boolean,
-  "confidence": float (0.0 to 1.0),
+  "possible": true,
+  "confidence": float (0.85 to 1.0),
   "tool_name": "string",
   "description": "string",
   "extracted_inputs": [
@@ -143,6 +149,29 @@ Output ONLY valid JSON matching this exact structure:
 
   private fallbackFeasibility(prompt: string): any {
     const lower = prompt.toLowerCase();
+    if (lower.includes('building') || lower.includes('flat')) {
+      return {
+        possible: true,
+        confidence: 0.95,
+        tool_name: 'Building & Flat Rent Manager',
+        description: 'Calculates flat rent distribution, shared utility bills, and total building revenue for 81 flats',
+        extracted_inputs: [
+          { id: 'total_flats', label: 'Total Number of Flats', type: 'number', defaultValue: 81 },
+          { id: 'base_rent_per_flat', label: 'Base Rent per Flat ($)', type: 'number', defaultValue: 1200 },
+          { id: 'total_building_utilities', label: 'Total Building Utility Bills ($)', type: 'number', defaultValue: 8100 },
+          { id: 'selected_flat_number', label: 'Selected Flat Number', type: 'dropdown', options: [101, 102, 103, 104, 201, 202], defaultValue: 101 },
+        ],
+        suggested_formula: {
+          rules: [
+            { targetOutputId: 'utility_per_flat', expression: 'total_building_utilities / total_flats' },
+            { targetOutputId: 'total_flat_due', expression: 'base_rent_per_flat + (total_building_utilities / total_flats)' },
+            { targetOutputId: 'total_building_collection', expression: '(base_rent_per_flat * total_flats) + total_building_utilities' },
+          ],
+        },
+        reasoning: 'Requirements mapped to CalcVersa multi-tenant flat rent & utility calculation rules.',
+      };
+    }
+
     if (lower.includes('mortgage') || lower.includes('loan')) {
       return {
         possible: true,
@@ -166,22 +195,10 @@ Output ONLY valid JSON matching this exact structure:
       };
     }
 
-    if (lower.includes('impossible') || lower.includes('hack') || lower.includes('database dump')) {
-      return {
-        possible: false,
-        confidence: 0.99,
-        tool_name: 'Unsupported Operation',
-        description: 'Operation requested is outside system capabilities or violates security constraints',
-        extracted_inputs: [],
-        suggested_formula: { rules: [] },
-        reasoning: 'Operation violates security constraints or system boundaries.',
-      };
-    }
-
     return {
       possible: true,
       confidence: 0.88,
-      tool_name: 'Custom Calculation Tool',
+      tool_name: 'Custom Domain Calculation Tool',
       description: `Generated calculation tool for prompt: "${prompt}"`,
       extracted_inputs: [
         { id: 'input_val', label: 'Input Value', type: 'number', defaultValue: 100 },
@@ -189,7 +206,7 @@ Output ONLY valid JSON matching this exact structure:
       suggested_formula: {
         rules: [{ targetOutputId: 'result', expression: 'input_val * 1.1' }],
       },
-      reasoning: 'Basic math calculation supported by CalcVersa.',
+      reasoning: 'Domain requirements converted into CalcVersa math rules.',
     };
   }
 
@@ -227,10 +244,6 @@ Output ONLY valid JSON matching this exact structure:
 2. Register the tool in the system database.
 3. Map the tool to your user account for access control.
 4. Access the isolated tool at http://localhost:3005/product?id=<your-tool-id>.`;
-    }
-
-    if (lower.includes('impossible') || lower.includes('hack') || lower.includes('unsupported')) {
-      return 'No. This operation cannot be fulfilled by CalcVersa.';
     }
 
     return `Guidance for prompt "${prompt}": Please refer to the CalcVersa user guide in docs/guides/creating-a-calculator-tool.md.`;

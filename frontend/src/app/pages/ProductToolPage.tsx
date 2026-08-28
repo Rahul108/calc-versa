@@ -7,12 +7,12 @@ export const ProductToolPage: React.FC = () => {
   const appId = searchParams.get('id') || '91956cd2-45e0-40f8-b378-c81fd2c3438d';
 
   const [app, setApp] = useState<any>(null);
-  const [inputs, setInputs] = useState<Record<string, any>>({});
+  const [rawInputs, setRawInputs] = useState<Record<string, string>>({});
+  const [currency, setCurrency] = useState('Tk');
   const [results, setResults] = useState<Record<string, any>>({});
   const [execTime, setExecTime] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [calculating, setCalculating] = useState(false);
-  const [error, setError] = useState('');
 
   useEffect(() => {
     loadApp();
@@ -20,7 +20,6 @@ export const ProductToolPage: React.FC = () => {
 
   const loadApp = async () => {
     setLoading(true);
-    setError('');
     try {
       const data = await fetchAppById(appId);
       setApp(data);
@@ -29,25 +28,17 @@ export const ProductToolPage: React.FC = () => {
       // Fallback mock tool
       const mock = {
         id: appId,
-        name: 'Mortgage Calculator',
-        description: 'Calculates monthly loan payments and interest rates',
+        name: 'Mortgage & Loan Calculator',
+        description: 'Calculates monthly payments, interest rates, and loan distribution',
         inputsConfig: {
           sections: [
             {
               title: 'Loan Details',
               fields: [
-                { id: 'principal', label: 'Loan Amount ($)', type: 'number', defaultValue: 300000 },
+                { id: 'principal', label: 'Loan Amount', type: 'number', defaultValue: 300000 },
                 { id: 'annual_rate', label: 'Interest Rate (%)', type: 'slider', min: 1, max: 20, defaultValue: 6.5 },
                 { id: 'term_years', label: 'Loan Term (Years)', type: 'dropdown', options: [15, 20, 30], defaultValue: 30 },
               ],
-            },
-          ],
-        },
-        formulaConfig: {
-          rules: [
-            {
-              targetOutputId: 'monthly_payment',
-              expression: '(principal * (annual_rate / 1200)) / (1 - (1 + (annual_rate / 1200)) ** (-1 * term_years * 12))',
             },
           ],
         },
@@ -60,35 +51,40 @@ export const ProductToolPage: React.FC = () => {
   };
 
   const initializeDefaultInputs = (config: any) => {
-    const defaults: Record<string, any> = {};
+    const defaults: Record<string, string> = {};
     if (config?.sections) {
       config.sections.forEach((sec: any) => {
         sec.fields?.forEach((f: any) => {
-          defaults[f.id] = f.defaultValue ?? 0;
+          defaults[f.id] = String(f.defaultValue ?? 0);
         });
       });
     }
-    setInputs(defaults);
+    setRawInputs(defaults);
     runCalculation(defaults);
   };
 
-  const handleInputChange = (fieldId: string, val: any) => {
-    const updated = { ...inputs, [fieldId]: Number(val) };
-    setInputs(updated);
+  const handleInputChange = (fieldId: string, val: string) => {
+    const updated = { ...rawInputs, [fieldId]: val };
+    setRawInputs(updated);
     runCalculation(updated);
   };
 
-  const runCalculation = async (currentInputs: Record<string, any>) => {
+  const runCalculation = async (currentInputs: Record<string, string>) => {
     setCalculating(true);
+    const parsedPayload: Record<string, number> = {};
+    Object.keys(currentInputs).forEach((k) => {
+      parsedPayload[k] = parseFloat(currentInputs[k]) || 0;
+    });
+
     try {
-      const data = await calculateApp(appId, currentInputs, false);
+      const data = await calculateApp(appId, parsedPayload, false);
       setResults(data.results || {});
       setExecTime(data.execution_time_ms ?? 0.15);
     } catch (err: any) {
-      // Fallback local evaluation if offline
-      const p = currentInputs.principal || 300000;
-      const r = (currentInputs.annual_rate || 6.5) / 1200;
-      const n = (currentInputs.term_years || 30) * 12;
+      // Fallback calculation if offline
+      const p = parsedPayload.principal || 300000;
+      const r = (parsedPayload.annual_rate || 6.5) / 1200;
+      const n = (parsedPayload.term_years || 30) * 12;
       const payment = (p * r) / (1 - Math.pow(1 + r, -n));
       setResults({ monthly_payment: payment });
       setExecTime(0.18);
@@ -103,12 +99,25 @@ export const ProductToolPage: React.FC = () => {
 
   return (
     <div style={{ maxWidth: '1200px', margin: '2rem auto', padding: '0 1.5rem' }}>
-      {/* Header Breadcrumb */}
+      {/* Header Breadcrumb & Currency Selector */}
       <div style={{ marginBottom: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <Link to="/" style={{ color: '#94a3b8', textDecoration: 'none', fontSize: '0.9rem', fontWeight: 500 }}>
           ← Back to Tools Dashboard
         </Link>
-        <span className="badge-status badge-active">Live URL: http://localhost:3005/product?id={appId.substring(0, 8)}</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          <label style={{ fontSize: '0.85rem', color: '#94a3b8' }}>Currency Unit:</label>
+          <select
+            className="form-control"
+            value={currency}
+            onChange={(e) => setCurrency(e.target.value)}
+            style={{ width: '110px', padding: '0.35rem 0.6rem', fontSize: '0.85rem' }}
+          >
+            <option value="Tk">Tk (৳)</option>
+            <option value="₹">₹ (Rupee)</option>
+            <option value="$">$ (USD)</option>
+            <option value="€">€ (EUR)</option>
+          </select>
+        </div>
       </div>
 
       {/* Tool Title Card */}
@@ -132,7 +141,7 @@ export const ProductToolPage: React.FC = () => {
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.4rem' }}>
                       <label className="form-label">{field.label}</label>
                       <span style={{ fontSize: '0.85rem', fontWeight: 600, color: '#6366f1' }}>
-                        {inputs[field.id] !== undefined ? inputs[field.id] : field.defaultValue}
+                        {rawInputs[field.id] !== undefined ? rawInputs[field.id] : field.defaultValue}
                       </span>
                     </div>
 
@@ -144,7 +153,7 @@ export const ProductToolPage: React.FC = () => {
                           min={field.min ?? 1}
                           max={field.max ?? 30}
                           step={field.step ?? 0.1}
-                          value={inputs[field.id] ?? field.defaultValue}
+                          value={rawInputs[field.id] ?? field.defaultValue}
                           onChange={(e) => handleInputChange(field.id, e.target.value)}
                         />
                         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: '#64748b', marginTop: '0.25rem' }}>
@@ -155,20 +164,23 @@ export const ProductToolPage: React.FC = () => {
                     ) : field.type === 'dropdown' ? (
                       <select
                         className="form-control"
-                        value={inputs[field.id] ?? field.defaultValue}
+                        value={rawInputs[field.id] ?? field.defaultValue}
                         onChange={(e) => handleInputChange(field.id, e.target.value)}
                       >
                         {field.options?.map((opt: any) => (
                           <option key={opt} value={opt}>
-                            {opt} Years
+                            {opt}
                           </option>
                         ))}
                       </select>
                     ) : (
+                      /* Plain Numeric Input Field (Free typing, no spin arrows) */
                       <input
                         type="number"
                         className="form-control"
-                        value={inputs[field.id] ?? field.defaultValue}
+                        inputMode="decimal"
+                        placeholder="Enter value..."
+                        value={rawInputs[field.id] ?? ''}
                         onChange={(e) => handleInputChange(field.id, e.target.value)}
                       />
                     )}
@@ -196,21 +208,34 @@ export const ProductToolPage: React.FC = () => {
             {Object.keys(results).length === 0 ? (
               <p style={{ color: '#94a3b8' }}>Adjust inputs to view calculated outputs...</p>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-                {Object.entries(results).map(([key, val]) => (
-                  <div key={key} style={{ background: '#090d16', padding: '1.5rem', borderRadius: '0.75rem', border: '1px solid #23304d' }}>
-                    <p style={{ color: '#94a3b8', fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.5rem' }}>
-                      {key.replace(/_/g, ' ')}
-                    </p>
-                    <p style={{ fontSize: '2.25rem', fontWeight: 800, color: '#ffffff' }}>
-                      {typeof val === 'number'
-                        ? key.includes('payment') || key.includes('amount') || key.includes('total') || key.includes('cost')
-                          ? `$${val.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-                          : val.toFixed(4)
-                        : String(val)}
-                    </p>
-                  </div>
-                ))}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                {Object.entries(results).map(([key, val]) => {
+                  const isMoneyField =
+                    key.includes('payment') ||
+                    key.includes('amount') ||
+                    key.includes('total') ||
+                    key.includes('cost') ||
+                    key.includes('rent') ||
+                    key.includes('bill') ||
+                    key.includes('expense') ||
+                    key.includes('revenue') ||
+                    key.includes('due');
+
+                  return (
+                    <div key={key} style={{ background: '#090d16', padding: '1.25rem', borderRadius: '0.75rem', border: '1px solid #23304d' }}>
+                      <p style={{ color: '#94a3b8', fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.4rem' }}>
+                        {key.replace(/_/g, ' ')}
+                      </p>
+                      <p style={{ fontSize: '2rem', fontWeight: 800, color: '#ffffff' }}>
+                        {typeof val === 'number'
+                          ? isMoneyField
+                            ? `${currency} ${val.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                            : val.toFixed(4)
+                          : String(val)}
+                      </p>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>
