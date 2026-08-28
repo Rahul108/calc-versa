@@ -1,72 +1,32 @@
-# Troubleshooting & Bugfix Guide
+# Troubleshooting & Bugfix Directory
 
-This document contains solutions for common operational issues, database connection errors, container failures, and debugging steps.
-
----
-
-## 1. Database Connection Failures
-
-### Symptom
-API Gateway or TypeORM startup fails with:
-`Error: connect ECONNREFUSED 127.0.0.1:5432`
-
-### Troubleshooting Steps
-1. Verify PostgreSQL container status:
-   ```bash
-   docker ps -f name=calcversa-db
-   ```
-2. If container is stopped, restart via Docker Compose:
-   ```bash
-   docker-compose -f infra/docker/docker-compose.yml up -d
-   ```
-3. Verify database environment variables (`DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`).
+This directory contains detailed technical resolution records for operational issues, container compilation locks, database errors, and debugging workflows in **CalcVersa**.
 
 ---
 
-## 2. TypeORM Entity Metadata Reflection Error
+## Bugfix Records Index
 
-### Symptom
-NestJS startup fails with:
-`No metadata for "User" was found` or `Reflect.hasOwnMetadata is not a function`.
-
-### Fix
-Ensure `import 'reflect-metadata';` is at the very top of `libs/db/src/data-source.ts` and `main.ts`, and that `"experimentalDecorators": true` and `"emitDecoratorMetadata": true` are enabled in `tsconfig.base.json`.
-
----
-
-## 3. Tool Authorization Denial (403 Forbidden on `/product?id=33`)
-
-### Symptom
-Visiting product URL returns 403 Forbidden despite valid login.
-
-### Root Cause
-Missing entry in `users_n_app_mappings` or `user_permissions` table for the logged-in user ID and `app_id = "33"`.
-
-### Fix
-Query PostgreSQL database to inspect user permission mapping:
-```sql
-SELECT * FROM users_n_app_mappings WHERE user_id = 'user-uuid' AND app_id = '33';
-```
-Ensure `status` is set to `true`.
+| Record ID | Issue Summary | Category | Status |
+| :--- | :--- | :--- | :--- |
+| **[0001](file:///home/aninda-sarker-rahul/Documents/Personal/projects/calc-versa/docs/bugfix/0001-typeorm-decorator-cli-error.md)** | TypeORM Migration CLI `TS1240` Property Decorator Compilation Error | Database & TypeORM CLI | **Resolved** |
+| **[0002](file:///home/aninda-sarker-rahul/Documents/Personal/projects/calc-versa/docs/bugfix/0002-docker-ebusy-rmdir-lock.md)** | Docker Container `EBUSY: resource busy or locked, rmdir` | Docker Containerization | **Resolved** |
+| **[0003](file:///home/aninda-sarker-rahul/Documents/Personal/projects/calc-versa/docs/bugfix/0003-nest-entryfile-compilation-path.md)** | NestJS `--entryFile` Monorepo Compilation Path (`MODULE_NOT_FOUND`) | NestJS Build System | **Resolved** |
 
 ---
 
-## 4. Go Compute Service Build Errors
+## Common Operational Troubleshooting
 
-### Symptom
-`go run main.go` fails to resolve dependencies.
+### 1. Database Connection Failures
+- **Symptom**: `Error: connect ECONNREFUSED 127.0.0.1:5432`.
+- **Fix**: Verify PostgreSQL container status (`docker ps -f name=calcversa-postgres`). Host port is `5435`, container internal port is `5432`.
 
-### Fix
-Tidy Go modules inside `backend/compute-service-golang/`:
-```bash
-cd backend/compute-service-golang
-go mod download
-go mod tidy
-```
+### 2. Tool Authorization Denial (403 Forbidden on `/product?id=33`)
+- **Symptom**: 403 Forbidden despite valid login.
+- **Fix**: Inspect `users_n_app_mappings` or `user_permissions` table for the logged-in user ID and `app_id = "33"`.
 
 ---
 
 ## Related Documents
 - `docs/guides/getting-started.md`
-- `libs/db/src/entities/`
+- `docs/guides/coding-standards-and-observability.md`
 - `infra/docker/docker-compose.yml`
