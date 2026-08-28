@@ -6,22 +6,23 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
+	"github.com/Knetic/govaluate"
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 )
 
 const CorrelationIDHeader = "x-correlation-id"
 
-// RotationalFileWriter handles daily rotating log files under logs/ directory
 type RotationalFileWriter struct {
-	mu           sync.Mutex
-	logsDir      string
-	prefix       string // "app" or "error"
-	currentDate  string
-	currentFile  *os.File
+	mu          sync.Mutex
+	logsDir     string
+	prefix      string
+	currentDate string
+	currentFile *os.File
 }
 
 func NewRotationalFileWriter(logsDir, prefix string) *RotationalFileWriter {
@@ -55,12 +56,61 @@ func (w *RotationalFileWriter) Write(p []byte) (n int, err error) {
 	return w.currentFile.Write(p)
 }
 
-func main() {
+type FormulaRule struct {
+	TargetOutputID string `json:"targetOutputId"`
+	Expression     string `json:"expression"`
+}
+
+type FormulaConfig struct {
+	Engine string        `json:"engine"`
+	Rules  []FormulaRule `json:"rules"`
+}
+
+type EvaluateRequest struct {
+	Payload       map[string]interface{} `json:"payload"`
+	FormulaConfig FormulaConfig          `json:"formulaConfig"`
+}
+
+func ReplaceExponentiationOperators(expr string) string {
+	return strings.ReplaceAll(expr, "^", "**")
+}
+
+func EvaluateFormulaRules(req EvaluateRequest) (map[string]interface{}, error) {
+	parameters := make(map[string]interface{})
+	for k, v := range req.Payload {
+		parameters[k] = v
+	}
+
+	results := make(map[string]interface{})
+
+	for _, rule := range req.FormulaConfig.Rules {
+		if rule.Expression == "" || rule.TargetOutputID == "" {
+			continue
+		}
+
+		exprStr := ReplaceExponentiationOperators(rule.Expression)
+		expression, err := govaluate.NewEvaluableExpression(exprStr)
+		if err != nil {
+			return nil, fmt.Errorf("invalid expression format in rule '%s': %v", rule.TargetOutputID, err)
+		}
+
+		val, err := expression.Evaluate(parameters)
+		if err != nil {
+			return nil, fmt.Errorf("failed to evaluate rule '%s': %v", rule.TargetOutputID, err)
+		}
+
+		results[rule.TargetOutputID] = val
+		parameters[rule.TargetOutputID] = val
+	}
+
+	return results, nil
+}
+
+func SetupApp() *fiber.App {
 	logsDir := filepath.Join(".", "logs")
 	appWriter := NewRotationalFileWriter(logsDir, "app")
 	errorWriter := NewRotationalFileWriter(logsDir, "error")
 
-	// Multi-writer JSON handler for console and rotational file logs
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
 		Level: slog.LevelInfo,
 	}))
@@ -70,7 +120,6 @@ func main() {
 		AppName: "CalcVersa Compute Service (Go)",
 	})
 
-	// Correlation ID & Rotational Logging Middleware
 	app.Use(func(c *fiber.Ctx) error {
 		start := time.Now()
 
@@ -116,11 +165,9 @@ func main() {
 		jsonBytes, _ := json.Marshal(logObj)
 		jsonLine := append(jsonBytes, '\n')
 
-		// Write to app-<date>.log and stdout
 		os.Stdout.Write(jsonLine)
 		appWriter.Write(jsonLine)
 
-		// Write to error-<date>.log if status >= 400 or error exists
 		if statusCode >= 400 || err != nil {
 			errorWriter.Write(jsonLine)
 		}
@@ -128,7 +175,6 @@ func main() {
 		return err
 	})
 
-	// Health Check Route
 	app.Get("/health", func(c *fiber.Ctx) error {
 		return c.JSON(fiber.Map{
 			"status":        "ok",
@@ -138,34 +184,43 @@ func main() {
 		})
 	})
 
-	// Sample Formula Calculation Route
-	app.Post("/compute/eval", func(c *fiber.Ctx) error {
-		var req struct {
-			Expression string                 `json:"expression"`
-			Inputs     map[string]interface{} `json:"inputs"`
-		}
-
+	app.Post("/evaluate", func(c *fiber.Ctx) error {
+		start := time.Now()
+		var req EvaluateRequest
 		if err := c.BodyParser(&req); err != nil {
 			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				"statusCode":    400,
-				"error":         "BadRequest",
-				"message":       "Invalid calculation payload",
-				"service":       "compute-service-golang",
-				"correlationId": c.Locals("correlation_id"),
-				"timestamp":     time.Now().Format(time.RFC3339),
+				"statusCode": 400,
+				"error":      "BadRequest",
+				"message":    "Invalid evaluation payload format",
 			})
 		}
 
+		results, err := EvaluateFormulaRules(req)
+		if err != nil {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"statusCode": 400,
+				"error":      "EvaluationError",
+				"message":    err.Error(),
+			})
+		}
+
+		duration := time.Since(start)
+
 		return c.JSON(fiber.Map{
 			"status":        "success",
-			"expression":    req.Expression,
-			"result":        42.0,
+			"results":        results,
+			"duration_ms":    float64(duration.Microseconds()) / 1000.0,
 			"service":       "compute-service-golang",
 			"correlationId": c.Locals("correlation_id"),
 			"timestamp":     time.Now().Format(time.RFC3339),
 		})
 	})
 
+	return app
+}
+
+func main() {
+	app := SetupApp()
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
