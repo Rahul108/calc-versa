@@ -43,16 +43,31 @@ npm --prefix libs/db run migration:run
 
 ---
 
-## Browsing APIs & Services Locally
+## Browsing APIs & Admin Panel Locally
 
 | Service / Interface | Local Host URL | Description |
 | :--- | :--- | :--- |
+| **Admin Management Panel** | **`http://localhost:3005/admin`** | Interactive Admin Panel to inspect, configure, and edit all database entities |
 | **API Gateway & Swagger UI** | **`http://localhost:3005/api/docs`** | Interactive OpenAPI documentation & Auth APIs (`/auth/register`, `/auth/login`) |
 | **AI Assistant Microservice** | **`http://localhost:3006/health`** | AI guidance, operations (`/agent/operate`), and reporting |
 | **Go Compute Engine** | **`http://localhost:8085/health`** | Real-time mathematical formula evaluation engine (<2ms) |
 | **Python Analysis Service** | **`http://localhost:8005/health`** | Statistical data processing & analytics engine |
 | **RabbitMQ Dashboard** | **`http://localhost:15675`** | Event broker management console (`guest`/`guest`) |
 | **PostgreSQL Database** | **`localhost:5435`** | PostgreSQL DB (`calcversa_user` / `calcversa_pass` / `calcversa`) |
+
+---
+
+## Accessing the Admin Management Panel
+
+The Admin Panel at `http://localhost:3005/admin` requires an account with **`is_admin = true`**.
+
+### How to Promote a User to Admin:
+
+Run this command from your terminal to promote any registered user account (e.g., `johndoe`) to Admin:
+
+```bash
+docker exec -it calcversa-postgres psql -U calcversa_user -d calcversa -c "UPDATE users SET is_admin = true WHERE username = 'johndoe';"
+```
 
 ---
 

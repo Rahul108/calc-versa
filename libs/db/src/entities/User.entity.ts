@@ -35,6 +35,9 @@ export class User {
   @Column({ default: true })
   status!: boolean;
 
+  @Column({ default: false })
+  is_admin!: boolean;
+
   @Column()
   password!: string;
 
