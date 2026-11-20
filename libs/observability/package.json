@@ -1,0 +1,7 @@
+{
+  "name": "observability",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Framework-free structured logging and correlation-id helpers for CalcVersa Node services",
+  "main": "src/index.ts"
+}

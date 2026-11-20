@@ -1,69 +1,48 @@
-import {
-  ExceptionFilter,
-  Catch,
-  ArgumentsHost,
-  HttpException,
-  HttpStatus,
-} from '@nestjs/common';
+import { ExceptionFilter, Catch, ArgumentsHost, HttpException, HttpStatus } from '@nestjs/common';
 import { Request, Response } from 'express';
-import { CORRELATION_ID_HEADER } from '../middleware/correlation-id.middleware';
-import { FileLogger } from '../logging/file-logger.util';
+import {
+  SERVICE_NAME,
+  buildErrorLog,
+  buildErrorResponse,
+  logWriter,
+  resolveCorrelationId,
+} from '../observability';
 
+/**
+ * Converts every exception into the standard error body and logs it.
+ * Unexpected (non-HTTP) errors are logged in full but returned to the client as a
+ * generic 500, so internal details (SQL, stack, hostnames) never leak.
+ */
 @Catch()
 export class AllExceptionsFilter implements ExceptionFilter {
   catch(exception: unknown, host: ArgumentsHost) {
     const ctx = host.switchToHttp();
     const response = ctx.getResponse<Response>();
     const request = ctx.getRequest<Request>();
+    const correlationId = request.correlationId ?? resolveCorrelationId(request.headers);
 
-    const correlationId =
-      (request.headers[CORRELATION_ID_HEADER] as string) ||
-      (request as any).correlationId ||
-      'N/A';
+    const isHttp = exception instanceof HttpException;
+    const statusCode = isHttp ? exception.getStatus() : HttpStatus.INTERNAL_SERVER_ERROR;
+    const err = exception instanceof Error ? exception : new Error(String(exception));
 
-    const status =
-      exception instanceof HttpException
-        ? exception.getStatus()
-        : HttpStatus.INTERNAL_SERVER_ERROR;
+    let clientMessage: unknown = 'Internal server error';
+    if (isHttp) {
+      const body = exception.getResponse();
+      clientMessage = typeof body === 'object' && body !== null ? (body as { message?: unknown }).message ?? err.message : body;
+    }
 
-    const exceptionResponse =
-      exception instanceof HttpException ? exception.getResponse() : null;
+    const name = isHttp ? err.name : 'InternalServerError';
+    logWriter.error(
+      buildErrorLog(SERVICE_NAME, correlationId, request, {
+        statusCode,
+        message: isHttp ? clientMessage : err.message,
+        name: err.name,
+        stack: err.stack,
+      }),
+    );
 
-    const message =
-      typeof exceptionResponse === 'object' && exceptionResponse !== null
-        ? (exceptionResponse as any).message || (exception as any).message
-        : (exception as any).message || 'Internal Server Error';
-
-    const errorPayload = {
-      timestamp: new Date().toISOString(),
-      level: 'ERROR',
-      service: 'api-gateway-nodejs',
-      correlation_id: correlationId,
-      request: {
-        method: request.method,
-        url: request.originalUrl,
-        origin_ip: request.ip || request.socket?.remoteAddress || '127.0.0.1',
-        user_agent: request.headers['user-agent'] || 'Unknown',
-      },
-      status_code: status,
-      message,
-      error: {
-        code: (exception as any).name || 'InternalServerError',
-        stack: (exception as any).stack || null,
-      },
-    };
-
-    // Write to stderr, app-<date>.log, and error-<date>.log
-    FileLogger.logError(errorPayload);
-
-    response.status(status).json({
-      statusCode: status,
-      error: (exception as any).name || 'Error',
-      message,
-      service: 'api-gateway-nodejs',
-      path: request.originalUrl,
-      correlationId,
-      timestamp: new Date().toISOString(),
-    });
+    response
+      .status(statusCode)
+      .json(buildErrorResponse(SERVICE_NAME, correlationId, request.originalUrl, { statusCode, message: clientMessage, name }));
   }
 }

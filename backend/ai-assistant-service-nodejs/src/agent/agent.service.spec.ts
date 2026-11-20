@@ -60,3 +60,34 @@ describe('AgentService (AI RAG Pipeline & Safety Guardrails)', () => {
     ).rejects.toThrow(ForbiddenException);
   });
 });
+
+describe('AgentService report & operate (no fabricated data)', () => {
+  const realFetch = global.fetch;
+  afterEach(() => {
+    global.fetch = realFetch;
+  });
+
+  it('refuses unimplemented operations instead of claiming success', async () => {
+    const service = new AgentService({} as any);
+    await expect(service.performOperation({ action: 'mark_resolved' } as any)).rejects.toThrow(
+      /not implemented/,
+    );
+  });
+
+  it('builds the usage report from live gateway data', async () => {
+    global.fetch = jest.fn(async (url: string) => ({
+      ok: true,
+      json: async () =>
+        String(url).endsWith('/apps')
+          ? [{ id: 'a' }, { id: 'b' }]
+          : [
+              { read: true, write: true },
+              { read: true, write: false },
+            ],
+    })) as any;
+
+    const service = new AgentService({} as any);
+    const out = await service.getReport({}, 'Bearer t');
+    expect(out.report.summary).toEqual({ accessibleTools: 2, toolsWithWriteAccess: 1, toolsReadOnly: 1 });
+  });
+});

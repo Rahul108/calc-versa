@@ -4,6 +4,7 @@ import { JwtModule } from '@nestjs/jwt';
 import { AdminController } from './admin.controller';
 import { AdminService } from './admin.service';
 import { AdminGuard } from './guards/admin.guard';
+import { getJwtSecret } from '../common/config/jwt.config';
 import {
   User,
   App,
@@ -11,7 +12,7 @@ import {
   Permission,
   UserPermission,
   AppRecord,
-} from '../../../../libs/db/src';
+} from '../db';
 
 @Module({
   imports: [
@@ -23,9 +24,11 @@ import {
       UserPermission,
       AppRecord,
     ]),
-    JwtModule.register({
-      secret: process.env.JWT_SECRET || 'calcversa_secret_jwt_key_2026',
-      signOptions: { expiresIn: '7d' },
+    JwtModule.registerAsync({
+      useFactory: () => ({
+        secret: getJwtSecret(),
+        signOptions: { expiresIn: '7d' },
+      }),
     }),
   ],
   controllers: [AdminController],

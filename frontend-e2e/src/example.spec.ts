@@ -1,8 +1,7 @@
 import { test, expect } from '@playwright/test';
 
-test('has title', async ({ page }) => {
+test('signed-out visitors are sent to the login page', async ({ page }) => {
   await page.goto('/');
-
-  // Expect h1 to contain a substring.
-  expect(await page.locator('h1').innerText()).toContain('Welcome');
+  await expect(page.getByRole('heading', { name: /welcome back/i })).toBeVisible();
+  await expect(page.getByLabel(/username or email/i)).toHaveValue('');
 });

@@ -4,13 +4,14 @@ import { ValidationPipe, Logger } from '@nestjs/common';
 import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
+import { getCorsOrigins } from './common/config/cors.config';
 
 async function bootstrap() {
   const logger = new Logger('AIAssistantService');
   const app = await NestFactory.create(AppModule);
 
   app.enableCors({
-    origin: '*',
+    origin: getCorsOrigins(),
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
     credentials: true,
   });

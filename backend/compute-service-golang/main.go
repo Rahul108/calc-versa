@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -75,6 +76,45 @@ func ReplaceExponentiationOperators(expr string) string {
 	return strings.ReplaceAll(expr, "^", "**")
 }
 
+// maxCachedExpressions bounds the compiled-expression cache. Formulas come from
+// tool configs, so the working set is small; past the bound we just compile per call.
+const maxCachedExpressions = 10000
+
+var (
+	expressionCache     sync.Map // normalized expression string -> *govaluate.EvaluableExpression
+	expressionCacheSize int64
+	expressionCacheMu   sync.Mutex
+)
+
+// compileExpression returns a cached compiled expression, compiling it on first use.
+// Compiled govaluate expressions are immutable and safe to evaluate concurrently.
+func compileExpression(exprStr string) (*govaluate.EvaluableExpression, error) {
+	if cached, ok := expressionCache.Load(exprStr); ok {
+		return cached.(*govaluate.EvaluableExpression), nil
+	}
+
+	expression, err := govaluate.NewEvaluableExpression(exprStr)
+	if err != nil {
+		return nil, err
+	}
+
+	expressionCacheMu.Lock()
+	if expressionCacheSize < maxCachedExpressions {
+		if _, loaded := expressionCache.LoadOrStore(exprStr, expression); !loaded {
+			expressionCacheSize++
+		}
+	}
+	expressionCacheMu.Unlock()
+	return expression, nil
+}
+
+// isNonFinite reports whether a rule result cannot be represented in JSON
+// (e.g. division by zero yields +Inf, 0/0 yields NaN).
+func isNonFinite(val interface{}) bool {
+	f, ok := val.(float64)
+	return ok && (math.IsInf(f, 0) || math.IsNaN(f))
+}
+
 func EvaluateFormulaRules(req EvaluateRequest) (map[string]interface{}, error) {
 	parameters := make(map[string]interface{})
 	for k, v := range req.Payload {
@@ -89,7 +129,7 @@ func EvaluateFormulaRules(req EvaluateRequest) (map[string]interface{}, error) {
 		}
 
 		exprStr := ReplaceExponentiationOperators(rule.Expression)
-		expression, err := govaluate.NewEvaluableExpression(exprStr)
+		expression, err := compileExpression(exprStr)
 		if err != nil {
 			return nil, fmt.Errorf("invalid expression format in rule '%s': %v", rule.TargetOutputID, err)
 		}
@@ -97,6 +137,9 @@ func EvaluateFormulaRules(req EvaluateRequest) (map[string]interface{}, error) {
 		val, err := expression.Evaluate(parameters)
 		if err != nil {
 			return nil, fmt.Errorf("failed to evaluate rule '%s': %v", rule.TargetOutputID, err)
+		}
+		if isNonFinite(val) {
+			return nil, fmt.Errorf("rule '%s' produced a non-finite result (%v); check for division by zero or invalid inputs", rule.TargetOutputID, val)
 		}
 
 		results[rule.TargetOutputID] = val
@@ -117,7 +160,11 @@ func SetupApp() *fiber.App {
 	slog.SetDefault(logger)
 
 	app := fiber.New(fiber.Config{
-		AppName: "CalcVersa Compute Service (Go)",
+		AppName:      "CalcVersa Compute Service (Go)",
+		BodyLimit:    1 * 1024 * 1024,
+		ReadTimeout:  10 * time.Second,
+		WriteTimeout: 10 * time.Second,
+		IdleTimeout:  60 * time.Second,
 	})
 
 	app.Use(func(c *fiber.Ctx) error {
@@ -189,18 +236,20 @@ func SetupApp() *fiber.App {
 		var req EvaluateRequest
 		if err := c.BodyParser(&req); err != nil {
 			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				"statusCode": 400,
-				"error":      "BadRequest",
-				"message":    "Invalid evaluation payload format",
+				"statusCode":    400,
+				"error":         "BadRequest",
+				"message":       "Invalid evaluation payload format",
+				"correlationId": c.Locals("correlation_id"),
 			})
 		}
 
 		results, err := EvaluateFormulaRules(req)
 		if err != nil {
 			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				"statusCode": 400,
-				"error":      "EvaluationError",
-				"message":    err.Error(),
+				"statusCode":    400,
+				"error":         "EvaluationError",
+				"message":       err.Error(),
+				"correlationId": c.Locals("correlation_id"),
 			})
 		}
 
@@ -208,8 +257,8 @@ func SetupApp() *fiber.App {
 
 		return c.JSON(fiber.Map{
 			"status":        "success",
-			"results":        results,
-			"duration_ms":    float64(duration.Microseconds()) / 1000.0,
+			"results":       results,
+			"duration_ms":   float64(duration.Microseconds()) / 1000.0,
 			"service":       "compute-service-golang",
 			"correlationId": c.Locals("correlation_id"),
 			"timestamp":     time.Now().Format(time.RFC3339),
@@ -223,7 +272,9 @@ func main() {
 	app := SetupApp()
 	port := os.Getenv("PORT")
 	if port == "" {
-		port = "8080"
+		// 8085 matches the API Gateway's default COMPUTE_SERVICE_URL for host runs;
+		// docker-compose sets PORT=8080 inside the container explicitly.
+		port = "8085"
 	}
 
 	slog.Info("Compute Service starting", slog.String("port", port))

@@ -3,6 +3,8 @@ import {
   ForbiddenException,
   BadRequestException,
   NotFoundException,
+  NotImplementedException,
+  BadGatewayException,
 } from '@nestjs/common';
 import { GeminiService } from '../gemini/gemini.service';
 import { GuidePromptDto } from '../dto/guide-prompt.dto';
@@ -12,6 +14,8 @@ import { FeasibilityPromptDto } from '../dto/feasibility-prompt.dto';
 import { CreateToolPromptDto } from '../dto/create-tool-prompt.dto';
 import { UpdateToolPromptDto } from '../dto/update-tool-prompt.dto';
 import { sanitizeFormulaExpression } from '../common/sanitizer';
+
+const GATEWAY_TIMEOUT_MS = 10_000;
 
 @Injectable()
 export class AgentService {
@@ -52,7 +56,7 @@ export class AgentService {
         ],
       },
       formulaConfig: analysis.suggested_formula || { rules: [] },
-      uiConfig: { theme: 'dark', primaryColor: '#6366f1' },
+      uiConfig: { theme: 'dark', primaryColor: '#6366f1', source: 'ai' },
     };
 
     return {
@@ -95,6 +99,7 @@ export class AgentService {
         method: 'POST',
         headers,
         body: JSON.stringify(dto.tool_draft),
+        signal: AbortSignal.timeout(GATEWAY_TIMEOUT_MS),
       });
 
       if (!response.ok) {
@@ -131,7 +136,11 @@ export class AgentService {
     }
 
     // Step 1: Fetch existing app schema
-    const fetchRes = await fetch(`${apiGatewayUrl}/apps/${dto.appId}`, { headers });
+    const appPath = `/apps/${encodeURIComponent(dto.appId)}`;
+    const fetchRes = await fetch(`${apiGatewayUrl}${appPath}`, {
+      headers,
+      signal: AbortSignal.timeout(GATEWAY_TIMEOUT_MS),
+    });
     if (!fetchRes.ok) {
       throw new NotFoundException(`Calculator tool with ID "${dto.appId}" not found or access denied`);
     }
@@ -151,9 +160,10 @@ export class AgentService {
     }
 
     // Step 3: Put updated schema back to API Gateway
-    const updateRes = await fetch(`${apiGatewayUrl}/apps/${dto.appId}`, {
+    const updateRes = await fetch(`${apiGatewayUrl}${appPath}`, {
       method: 'PUT',
       headers,
+      signal: AbortSignal.timeout(GATEWAY_TIMEOUT_MS),
       body: JSON.stringify({
         inputsConfig: updatedSchema.inputsConfig,
         formulaConfig: updatedSchema.formulaConfig,
@@ -187,27 +197,51 @@ export class AgentService {
     };
   }
 
-  async performOperation(dto: OperatePromptDto) {
-    const result = await this.geminiService.processOperation(
-      dto.action,
-      dto.prompt,
-      dto.targetId,
+  /**
+   * Prompt-driven operations are not implemented yet. This used to return a fake
+   * "executed successfully" response without doing anything.
+   */
+  async performOperation(dto: OperatePromptDto): Promise<never> {
+    throw new NotImplementedException(
+      `AI operation '${dto.action}' is not implemented yet; no action was taken.`,
     );
-
-    return {
-      operation: dto.action,
-      result,
-      timestamp: new Date().toISOString(),
-    };
   }
 
-  async getReport(dto: ReportRequestDto) {
-    const reportData = await this.geminiService.generateReport(
-      dto.reportType || 'usage_summary',
-    );
+  /**
+   * Usage summary for the calling user, built from live API Gateway data
+   * (previously hard-coded numbers).
+   */
+  async getReport(dto: ReportRequestDto, authHeader: string) {
+    const reportType = dto.reportType || 'usage_summary';
+    if (reportType !== 'usage_summary') {
+      throw new NotImplementedException(`Report type '${reportType}' is not implemented yet`);
+    }
+
+    const apiGatewayUrl = process.env.API_GATEWAY_URL || 'http://localhost:3005';
+    const get = async (path: string) => {
+      const res = await fetch(`${apiGatewayUrl}${path}`, {
+        headers: { Authorization: authHeader },
+        signal: AbortSignal.timeout(GATEWAY_TIMEOUT_MS),
+      }).catch((err) => {
+        throw new BadGatewayException(`API Gateway unavailable: ${err.message}`);
+      });
+      if (!res.ok) throw new BadGatewayException(`API Gateway returned HTTP ${res.status} for ${path}`);
+      return res.json();
+    };
+
+    const [apps, permissions] = await Promise.all([get('/apps'), get('/permissions/me')]);
+    const perms: Array<{ read: boolean; write: boolean }> = Array.isArray(permissions) ? permissions : [];
 
     return {
-      report: reportData,
+      report: {
+        reportType,
+        generatedAt: new Date().toISOString(),
+        summary: {
+          accessibleTools: Array.isArray(apps) ? apps.length : 0,
+          toolsWithWriteAccess: perms.filter((p) => p.write).length,
+          toolsReadOnly: perms.filter((p) => p.read && !p.write).length,
+        },
+      },
       timestamp: new Date().toISOString(),
     };
   }

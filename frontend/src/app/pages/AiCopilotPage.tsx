@@ -1,208 +1,173 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { evaluateAiFeasibility, createAiTool } from '../services/api';
+import { useState, type FormEvent } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { api } from '../services/api';
+import { Alert } from '../components/Feedback';
+import { Icon } from '../components/Icon';
+import { getSections } from '../lib/fields';
+import type { FeasibilityResponse, ToolDraft } from '../types';
 
-export const AiCopilotPage: React.FC = () => {
+const EXAMPLE =
+  'A building management tool for 81 flats: each flat pays base rent plus an equal share of utility bills; show the total due per flat and total collection.';
+
+export default function AiCopilotPage() {
   const navigate = useNavigate();
-
-  const [prompt, setPrompt] = useState('prepare me a building management tool, total number of flat: 81, each flat owner will be able to see their rents and bills, separate search fields for each flat numbers, show summarized result');
+  const [prompt, setPrompt] = useState('');
+  const [result, setResult] = useState<FeasibilityResponse | null>(null);
+  const [draft, setDraft] = useState<ToolDraft | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
-  const [instantiating, setInstantiating] = useState(false);
-  const [feasibility, setFeasibility] = useState<any>(null);
+  const [creating, setCreating] = useState(false);
   const [error, setError] = useState('');
 
-  const handleAnalyze = async (e: React.FormEvent) => {
+  const analyze = async (e: FormEvent) => {
     e.preventDefault();
     if (!prompt.trim()) return;
-
     setAnalyzing(true);
     setError('');
-    setFeasibility(null);
-
+    setResult(null);
+    setDraft(null);
     try {
-      const result = await evaluateAiFeasibility(prompt);
-      setFeasibility(result);
-    } catch (err: any) {
-      setError(err.message || 'AI Feasibility evaluation failed.');
+      const res = await api.aiFeasibility(prompt.trim());
+      setResult(res);
+      setDraft(res.tool_draft);
+    } catch (err) {
+      setError((err as Error).message);
     } finally {
       setAnalyzing(false);
     }
   };
 
-  const handleRuleExpressionChange = (ruleIdx: number, newExpression: string) => {
-    if (!feasibility?.tool_draft?.formulaConfig?.rules) return;
-    const updatedDraft = JSON.parse(JSON.stringify(feasibility.tool_draft));
-    updatedDraft.formulaConfig.rules[ruleIdx].expression = newExpression;
-    setFeasibility({ ...feasibility, tool_draft: updatedDraft });
+  const updateRule = (index: number, expression: string) => {
+    if (!draft) return;
+    const rules = (draft.formulaConfig.rules ?? []).map((r, i) => (i === index ? { ...r, expression } : r));
+    setDraft({ ...draft, formulaConfig: { ...draft.formulaConfig, rules } });
   };
 
-  const handleToolNameChange = (newName: string) => {
-    if (!feasibility?.tool_draft) return;
-    const updatedDraft = JSON.parse(JSON.stringify(feasibility.tool_draft));
-    updatedDraft.name = newName;
-    setFeasibility({ ...feasibility, tool_draft: updatedDraft });
-  };
-
-  const handleInstantiate = async () => {
-    if (!feasibility?.tool_draft) return;
-    setInstantiating(true);
+  const create = async () => {
+    if (!draft) return;
+    setCreating(true);
     setError('');
-
     try {
-      const res = await createAiTool(feasibility.tool_draft);
-      if (res?.app?.id) {
-        navigate(`/product?id=${res.app.id}`);
-      } else {
-        navigate('/');
-      }
-    } catch (err: any) {
-      setError(err.message || 'Tool instantiation failed.');
+      const res = await api.aiCreateTool(draft);
+      navigate(res?.app?.id ? `/product?id=${res.app.id}` : '/');
+    } catch (err) {
+      setError((err as Error).message);
     } finally {
-      setInstantiating(false);
+      setCreating(false);
     }
   };
 
+  const fields = draft ? getSections(draft.inputsConfig).flatMap((s) => s.fields) : [];
+  const canCreate = !!result?.possible && !!result?.safety_validated;
+
   return (
-    <div style={{ maxWidth: '1200px', margin: '2rem auto', padding: '0 1.5rem' }}>
-      <div style={{ marginBottom: '2rem', textAlign: 'center' }}>
-        <span className="badge-status badge-ai" style={{ marginBottom: '0.5rem' }}>✨ Google Gemini 2.5 Flash Engine</span>
-        <h2 style={{ fontSize: '2.25rem', fontWeight: 800 }} className="gradient-text">
-          AI Prompt Copilot & Tool Configurator
-        </h2>
-        <p style={{ color: '#94a3b8', marginTop: '0.5rem', maxWidth: '650px', margin: '0.5rem auto 0' }}>
-          Describe any calculation tool in plain English. CalcVersa AI Agent will evaluate feasibility, generate input schemas, format mathematical formulas, and allow you to tweak formulas before instantiating.
+    <div className="page">
+      <Link to="/" className="back-link">
+        <Icon name="arrowLeft" size={15} /> All tools
+      </Link>
+      <div className="page-header">
+        <span className="eyebrow">AI copilot</span>
+        <h1 className="page-title">Describe it. We'll draft the tool.</h1>
+        <p className="muted">
+          Describe a calculation tool in plain language. Review the generated inputs and formulas before anything is
+          created.
         </p>
       </div>
 
-      {/* Prompt Input Form */}
-      <div className="glass-card" style={{ marginBottom: '2rem' }}>
-        <form onSubmit={handleAnalyze}>
-          <label className="form-label" style={{ fontSize: '1rem', color: '#fff', marginBottom: '0.75rem' }}>
-            User Requirement Prompt
+      <form onSubmit={analyze} className="card stack">
+        <div className="field">
+          <label htmlFor="ai-prompt" className="form-label">
+            What should the tool do?
           </label>
           <textarea
+            id="ai-prompt"
             className="form-control"
-            rows={3}
+            rows={4}
+            placeholder={`Example: ${EXAMPLE}`}
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
-            placeholder="e.g. Create a Building Management Tool with 81 flats, rent, utilities..."
-            style={{ fontSize: '1rem', marginBottom: '1.25rem' }}
           />
-
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div style={{ display: 'flex', gap: '0.5rem' }}>
-              <button
-                type="button"
-                className="btn-secondary"
-                onClick={() => setPrompt('prepare me a building management tool, total number of flat: 81, each flat owner will be able to see their rents and bills, separate search fields for each flat numbers, show summarized result')}
-                style={{ fontSize: '0.8rem', padding: '0.35rem 0.75rem' }}
-              >
-                Sample: Building Management
-              </button>
-              <button
-                type="button"
-                className="btn-secondary"
-                onClick={() => setPrompt('Create a Loan Amortization Schedule tool with Principal, Rate, and Months.')}
-                style={{ fontSize: '0.8rem', padding: '0.35rem 0.75rem' }}
-              >
-                Sample: Amortization
-              </button>
-            </div>
-
-            <button type="submit" className="btn-primary" disabled={analyzing}>
-              {analyzing ? 'Evaluating Feasibility...' : '⚡ Analyze Feasibility with Gemini'}
+        </div>
+        <div className="row wrap">
+          <button type="submit" className="btn-accent" disabled={analyzing || !prompt.trim()}>
+            <Icon name="sparkles" size={16} />
+            {analyzing ? 'Analysing…' : 'Generate draft'}
+          </button>
+          {!prompt && (
+            <button type="button" className="btn-secondary" onClick={() => setPrompt(EXAMPLE)}>
+              Use example
             </button>
-          </div>
-        </form>
-      </div>
-
-      {error && (
-        <div style={{ background: 'rgba(239, 68, 68, 0.15)', color: '#fca5a5', border: '1px solid rgba(239, 68, 68, 0.3)', padding: '1rem', borderRadius: '0.75rem', marginBottom: '1.5rem' }}>
-          {error}
+          )}
         </div>
-      )}
+      </form>
 
-      {/* AI Feasibility & Interactive Formula Configurator Preview Card */}
-      {feasibility && (
-        <div className="glass-card" style={{ border: feasibility.possible ? '1px solid #6366f1' : '1px solid #ef4444', animation: 'fadeIn 0.3s ease-in' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', borderBottom: '1px solid #23304d', paddingBottom: '1rem' }}>
-            <div>
-              <span className={`badge-status ${feasibility.possible ? 'badge-active' : ''}`} style={{ background: feasibility.possible ? undefined : 'rgba(239, 68, 68, 0.2)', color: feasibility.possible ? undefined : '#ef4444' }}>
-                {feasibility.possible ? '✅ Tool Creation Feasible' : '❌ Requirements Not Feasible'}
-              </span>
-              <span style={{ fontSize: '0.85rem', color: '#94a3b8', marginLeft: '1rem' }}>
-                Confidence Score: <strong>{(feasibility.confidence * 100).toFixed(0)}%</strong>
-              </span>
-            </div>
+      {error && <Alert kind="error">{error}</Alert>}
 
-            {feasibility.possible && (
-              <button onClick={handleInstantiate} className="btn-primary" disabled={instantiating}>
-                {instantiating ? 'Instantiating Tool...' : '🚀 Approve & Instantiate Tool'}
-              </button>
-            )}
+      {result && draft && (
+        <section className="card stack" aria-label="Generated draft">
+          <div className="row row-between wrap">
+            <h2 className="section-title">Draft</h2>
+            <span className={result.possible ? 'badge-status badge-active' : 'badge-status badge-danger'}>
+              {result.possible ? 'Feasible' : 'Not feasible'} · confidence {Math.round(result.confidence * 100)}%
+            </span>
           </div>
 
-          <div style={{ marginBottom: '1.25rem' }}>
-            <label className="form-label">Tool Name (Editable)</label>
-            <input
-              type="text"
-              className="form-control"
-              value={feasibility.tool_draft?.name || ''}
-              onChange={(e) => handleToolNameChange(e.target.value)}
-              style={{ fontWeight: 700, fontSize: '1.1rem' }}
-            />
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))', gap: '1.5rem', marginBottom: '1.5rem' }}>
-            {/* Extracted Input Controls */}
-            <div style={{ background: '#0d1322', padding: '1.25rem', borderRadius: '0.75rem', border: '1px solid #23304d' }}>
-              <h4 style={{ fontSize: '0.95rem', fontWeight: 600, color: '#a5b4fc', marginBottom: '1rem' }}>Extracted Input Parameters</h4>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                {feasibility.tool_draft?.inputsConfig?.sections?.[0]?.fields?.map((f: any, idx: number) => (
-                  <div key={idx} style={{ background: '#131b2e', padding: '0.75rem', borderRadius: '0.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div>
-                      <span style={{ fontSize: '0.85rem', color: '#fff', fontWeight: 600 }}>{f.label}</span>
-                      <span style={{ fontSize: '0.75rem', color: '#64748b', display: 'block' }}>ID: <code>{f.id}</code></span>
-                    </div>
-                    <span className="badge-status badge-active" style={{ fontSize: '0.7rem' }}>{f.type}</span>
-                  </div>
+          {result.safety_warnings.length > 0 && (
+            <Alert kind="error">
+              <ul className="problem-list">
+                {result.safety_warnings.map((w) => (
+                  <li key={w}>{w}</li>
                 ))}
-              </div>
-            </div>
+              </ul>
+            </Alert>
+          )}
 
-            {/* Editable Formula Rules */}
-            <div style={{ background: '#0d1322', padding: '1.25rem', borderRadius: '0.75rem', border: '1px solid #23304d' }}>
-              <h4 style={{ fontSize: '0.95rem', fontWeight: 600, color: '#a5b4fc', marginBottom: '0.5rem' }}>
-                Mathematical Formula Rules (Editable)
-              </h4>
-              <p style={{ color: '#94a3b8', fontSize: '0.75rem', marginBottom: '1rem' }}>
-                Review and tweak any formula rule expression before instantiating:
-              </p>
+          <div className="field">
+            <label htmlFor="ai-name" className="form-label">
+              Tool name
+            </label>
+            <input id="ai-name" className="form-control" value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
+          </div>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
-                {feasibility.tool_draft?.formulaConfig?.rules?.map((r: any, idx: number) => (
-                  <div key={idx} style={{ background: '#131b2e', padding: '0.75rem', borderRadius: '0.5rem', border: '1px solid #23304d' }}>
-                    <label style={{ fontSize: '0.75rem', color: '#34d399', fontWeight: 600, display: 'block', marginBottom: '0.35rem' }}>
-                      Target Output: <code>{r.targetOutputId}</code>
-                    </label>
-                    <input
-                      type="text"
-                      className="form-control"
-                      value={r.expression}
-                      onChange={(e) => handleRuleExpressionChange(idx, e.target.value)}
-                      style={{ fontFamily: 'monospace', fontSize: '0.85rem', color: '#34d399' }}
-                    />
-                  </div>
+          <div className="grid-2">
+            <div className="stack">
+              <h3 className="form-label">Inputs</h3>
+              <ul className="breakdown-list">
+                {fields.map((f) => (
+                  <li key={f.id}>
+                    <span>
+                      <strong>{f.label}</strong> <code className="muted small">{f.id}</code>
+                    </span>
+                    <span className="badge-status badge-muted">{f.type}</span>
+                  </li>
                 ))}
-              </div>
+              </ul>
+            </div>
+            <div className="stack">
+              <h3 className="form-label">Formulas (editable)</h3>
+              {(draft.formulaConfig.rules ?? []).map((r, i) => (
+                <div key={`${r.targetOutputId}-${i}`} className="field">
+                  <label htmlFor={`ai-rule-${i}`} className="form-label mono">
+                    {r.targetOutputId} =
+                  </label>
+                  <input id={`ai-rule-${i}`} className="form-control mono" value={r.expression} onChange={(e) => updateRule(i, e.target.value)} />
+                </div>
+              ))}
             </div>
           </div>
 
-          <div style={{ background: '#090d16', padding: '1rem', borderRadius: '0.5rem', fontSize: '0.85rem', color: '#94a3b8' }}>
-            💡 <strong>AI Reasoning:</strong> {feasibility.reasoning}
+          <p className="muted small">
+            <strong>Reasoning:</strong> {result.reasoning}
+          </p>
+
+          <div className="row wrap">
+            <button type="button" className="btn-accent" onClick={() => void create()} disabled={creating || !canCreate}>
+              <Icon name="check" size={16} />
+              {creating ? 'Creating…' : 'Approve & create tool'}
+            </button>
+            {!canCreate && <span className="muted small">Fix the issues above or rephrase the prompt to create this tool.</span>}
           </div>
-        </div>
+        </section>
       )}
     </div>
   );
-};
+}

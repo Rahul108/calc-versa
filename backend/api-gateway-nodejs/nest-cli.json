@@ -3,6 +3,12 @@
   "collection": "@nestjs/schematics",
   "sourceRoot": "src",
   "compilerOptions": {
-    "deleteOutDir": false
+    "deleteOutDir": false,
+    "assets": [
+      {
+        "include": "admin/*.html",
+        "outDir": "dist/backend/api-gateway-nodejs/src"
+      }
+    ]
   }
 }

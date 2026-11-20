@@ -4,6 +4,8 @@ export class SchemaUpdate1787934189939 implements MigrationInterface {
     name = 'SchemaUpdate1787934189939'
 
     public async up(queryRunner: QueryRunner): Promise<void> {
+        // uuid_generate_v4() below needs this extension (synchronize used to create it implicitly).
+        await queryRunner.query(`CREATE EXTENSION IF NOT EXISTS "uuid-ossp"`);
         await queryRunner.query(`CREATE TABLE "permissions" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "name" character varying NOT NULL, "read" boolean NOT NULL DEFAULT false, "write" boolean NOT NULL DEFAULT false, CONSTRAINT "UQ_48ce552495d14eae9b187bb6716" UNIQUE ("name"), CONSTRAINT "PK_920331560282b8bd21bb02290df" PRIMARY KEY ("id"))`);
         await queryRunner.query(`CREATE TABLE "user_permissions" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "user_id" uuid NOT NULL, "permission_id" uuid NOT NULL, "app_id" uuid NOT NULL, "created_at" TIMESTAMP NOT NULL DEFAULT now(), "updated_at" TIMESTAMP NOT NULL DEFAULT now(), CONSTRAINT "UQ_008506cf4aecc03b62ba3820f55" UNIQUE ("user_id", "permission_id", "app_id"), CONSTRAINT "PK_01f4295968ba33d73926684264f" PRIMARY KEY ("id"))`);
         await queryRunner.query(`CREATE TABLE "apps" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "name" character varying NOT NULL, "description" character varying NOT NULL, "status" boolean NOT NULL DEFAULT true, "inputsConfig" jsonb, "formulaConfig" jsonb, "uiConfig" jsonb, "created_at" TIMESTAMP NOT NULL DEFAULT now(), "updated_at" TIMESTAMP NOT NULL DEFAULT now(), CONSTRAINT "UQ_c1a24df1d51c2748d97561b77da" UNIQUE ("name"), CONSTRAINT "PK_c5121fda0f8268f1f7f84134e19" PRIMARY KEY ("id"))`);

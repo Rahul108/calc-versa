@@ -51,6 +51,8 @@ venv/
 .env.development.local
 .env.test.local
 .env.production.local
+!.env.example
+!**/.env.example
 
 # Go
 bin/
@@ -69,3 +71,6 @@ docker-compose.override.yml
 
 .nx/cache
 .nx/workspace-data
+
+# graft's local graph cache — regenerable, not committed (run `graft build`).
+/graft/

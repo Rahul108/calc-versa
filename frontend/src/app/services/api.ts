@@ -1,126 +1,60 @@
-const API_GATEWAY_URL = 'http://localhost:3005';
-const AI_ASSISTANT_URL = 'http://localhost:3006';
+import { AI_ASSISTANT_URL, API_GATEWAY_URL } from '../config';
+import { apiFetch } from './http';
+import type {
+  AggregationResponse,
+  AppRecord,
+  AuthUser,
+  CalcApp,
+  CalculationResponse,
+  FeasibilityResponse,
+  ToolDraft,
+} from '../types';
 
-export function getStoredToken(): string {
-  return localStorage.getItem('calcversa_jwt_token') || '';
-}
+const gw = <T>(path: string, options?: Parameters<typeof apiFetch>[2]) =>
+  apiFetch<T>(API_GATEWAY_URL, path, options);
+const ai = <T>(path: string, options?: Parameters<typeof apiFetch>[2]) =>
+  apiFetch<T>(AI_ASSISTANT_URL, path, options);
 
-export function setStoredToken(token: string, username?: string) {
-  localStorage.setItem('calcversa_jwt_token', token);
-  if (username) {
-    localStorage.setItem('calcversa_username', username);
-  }
-}
+const enc = encodeURIComponent;
 
-export function clearStoredToken() {
-  localStorage.removeItem('calcversa_jwt_token');
-  localStorage.removeItem('calcversa_username');
-}
-
-export async function loginUser(usernameOrEmail: string, passwordStr: string) {
-  const res = await fetch(`${API_GATEWAY_URL}/auth/login`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ usernameOrEmail, password: passwordStr }),
-  });
-  if (!res.ok) {
-    const err = await res.json();
-    throw new Error(err.message || 'Authentication failed');
-  }
-  const data = await res.json();
-  setStoredToken(data.access_token, data.user.username);
-  return data;
-}
-
-export async function fetchUserApps() {
-  const token = getStoredToken();
-  const res = await fetch(`${API_GATEWAY_URL}/apps`, {
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-  });
-  if (!res.ok) {
-    throw new Error('Failed to fetch calculation tools');
-  }
-  return res.json();
-}
-
-export async function fetchAppById(appId: string) {
-  const token = getStoredToken();
-  const res = await fetch(`${API_GATEWAY_URL}/apps/${appId}`, {
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-  });
-  if (!res.ok) {
-    throw new Error(`Tool with ID "${appId}" not found`);
-  }
-  return res.json();
-}
-
-export async function createApp(appData: any) {
-  const token = getStoredToken();
-  const res = await fetch(`${API_GATEWAY_URL}/apps`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify(appData),
-  });
-  if (!res.ok) {
-    const err = await res.json();
-    throw new Error(err.message || 'Failed to create calculation tool');
-  }
-  return res.json();
-}
-
-export async function calculateApp(appId: string, payload: Record<string, any>, saveRecord: boolean = true) {
-  const token = getStoredToken();
-  const res = await fetch(`${API_GATEWAY_URL}/apps/${appId}/calculate`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify({ payload, saveRecord }),
-  });
-  if (!res.ok) {
-    const err = await res.json();
-    throw new Error(err.message || 'Calculation execution failed');
-  }
-  return res.json();
-}
-
-export async function evaluateAiFeasibility(prompt: string) {
-  const res = await fetch(`${AI_ASSISTANT_URL}/agent/feasibility`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ prompt }),
-  });
-  if (!res.ok) {
-    const err = await res.json();
-    throw new Error(err.message || 'AI Feasibility evaluation failed');
-  }
-  return res.json();
-}
-
-export async function createAiTool(toolDraft: any) {
-  const token = getStoredToken();
-  const res = await fetch(`${AI_ASSISTANT_URL}/agent/create-tool`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify({
-      user_confirmed: true,
-      tool_draft: toolDraft,
+export const api = {
+  login: (usernameOrEmail: string, password: string) =>
+    gw<{ access_token: string; user: AuthUser }>('/auth/login', {
+      method: 'POST',
+      body: { usernameOrEmail, password },
+      auth: false,
     }),
-  });
-  if (!res.ok) {
-    const err = await res.json();
-    throw new Error(err.message || 'AI Tool instantiation failed');
-  }
-  return res.json();
+  me: () => gw<AuthUser>('/auth/me'),
+
+  listApps: () => gw<CalcApp[]>('/apps'),
+  getApp: (appId: string) => gw<CalcApp>(`/apps/${enc(appId)}`),
+  createApp: (draft: ToolDraft) => gw<CalcApp>('/apps', { method: 'POST', body: draft }),
+
+  calculate: (appId: string, payload: Record<string, unknown>, saveRecord: boolean) =>
+    gw<CalculationResponse>(`/apps/${enc(appId)}/calculate`, {
+      method: 'POST',
+      body: { payload, saveRecord },
+    }),
+  createRecord: (appId: string, payload: Record<string, unknown>, record_date?: string) =>
+    gw<AppRecord>('/records', { method: 'POST', body: { app_id: appId, payload, record_date } }),
+  listRecords: (appId: string) => gw<AppRecord[]>(`/apps/${enc(appId)}/records`),
+  deleteRecord: (appId: string, recordId: string) =>
+    gw<{ message: string }>(`/apps/${enc(appId)}/records/${enc(recordId)}`, { method: 'DELETE' }),
+  aggregate: (appId: string, startDate?: string, endDate?: string) =>
+    gw<AggregationResponse>(`/apps/${enc(appId)}/aggregate`, {
+      method: 'POST',
+      body: { startDate: startDate || undefined, endDate: endDate || undefined },
+    }),
+
+  aiFeasibility: (prompt: string) =>
+    ai<FeasibilityResponse>('/agent/feasibility', { method: 'POST', body: { prompt } }),
+  aiCreateTool: (draft: ToolDraft) =>
+    ai<{ app: CalcApp }>('/agent/create-tool', {
+      method: 'POST',
+      body: { user_confirmed: true, tool_draft: draft },
+    }),
+};
+
+export function adminPanelUrl() {
+  return `${API_GATEWAY_URL}/admin`;
 }

@@ -2,6 +2,8 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AppsController } from './apps.controller';
 import { AppsService } from './apps.service';
+import { ComputeClientService } from './compute-client.service';
+import { RecordAnalyticsService } from './record-analytics.service';
 import {
   App,
   UsersNAppMapping,
@@ -9,7 +11,8 @@ import {
   Permission,
   User,
   AppRecord,
-} from '../../../../libs/db/src';
+} from '../db';
+import { AppAccessModule } from '../auth/app-access.module';
 
 @Module({
   imports: [
@@ -21,9 +24,10 @@ import {
       User,
       AppRecord,
     ]),
+    AppAccessModule,
   ],
   controllers: [AppsController],
-  providers: [AppsService],
+  providers: [AppsService, ComputeClientService, RecordAnalyticsService],
   exports: [AppsService],
 })
 export class AppsModule {}

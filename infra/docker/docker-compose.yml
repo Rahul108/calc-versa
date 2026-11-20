@@ -53,12 +53,15 @@ services:
       DB_USER: calcversa_user
       DB_PASSWORD: calcversa_pass
       DB_NAME: calcversa
-      JWT_SECRET: calcversa_secret_jwt_key_2026
+      # Read from infra/docker/.env (gitignored). Copy .env.example and set a 32+ char secret.
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in infra/docker/.env (see .env.example)}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:4200}
       COMPUTE_SERVICE_URL: http://compute-service:8080
     volumes:
       # Bind mounts for host live hot-reloading
       - ../../backend/api-gateway-nodejs:/app/backend/api-gateway-nodejs
       - ../../libs/db:/app/libs/db
+      - ../../libs/observability:/app/libs/observability
       # Bind mount for host log file visibility (logs/app-<date>.log and logs/error-<date>.log)
       - ../../backend/api-gateway-nodejs/logs:/app/backend/api-gateway-nodejs/logs
       # Anonymous volumes preserving container node_modules & dist from root permission locks
@@ -100,10 +103,12 @@ services:
       NODE_ENV: development
       PORT: 3001
       API_GATEWAY_URL: http://api-gateway:3000
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:4200}
     env_file:
       - ../../backend/ai-assistant-service-nodejs/.env
     volumes:
       - ../../backend/ai-assistant-service-nodejs:/app/backend/ai-assistant-service-nodejs
+      - ../../libs/observability:/app/libs/observability
       - ../../backend/ai-assistant-service-nodejs/logs:/app/backend/ai-assistant-service-nodejs/logs
       - /app/backend/ai-assistant-service-nodejs/node_modules
       - /app/backend/ai-assistant-service-nodejs/dist
@@ -115,6 +120,10 @@ services:
     build:
       context: ../..
       dockerfile: infra/docker/calc-versa-react.Dockerfile
+      args:
+        # URLs the browser uses to reach the APIs (host ports, not container names).
+        VITE_API_GATEWAY_URL: ${VITE_API_GATEWAY_URL:-http://localhost:3005}
+        VITE_AI_ASSISTANT_URL: ${VITE_AI_ASSISTANT_URL:-http://localhost:3006}
     container_name: calcversa-frontend
     restart: always
     ports:

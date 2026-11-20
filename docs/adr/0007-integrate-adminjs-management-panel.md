@@ -1,6 +1,6 @@
 # ADR 0007: Integrate AdminJS Automated Administration Panel
 
-- **Status**: Accepted
+- **Status**: Superseded by [ADR 0012](0012-shared-observability-library-and-tooling-cleanup.md) — AdminJS was never wired into the gateway; the admin console is the static page in `backend/api-gateway-nodejs/src/admin/admin-panel.html`, and the AdminJS dependencies were removed.
 - **Date**: 2026-08-28
 - **Context**: CalcVersa requires a dedicated management administration panel accessible only to super-admin accounts (`is_admin === true`) to configure, inspect, and manage all database entities (`User`, `App`, `UsersNAppMapping`, `Permission`, `UserPermission`, `AppRecord`).
 

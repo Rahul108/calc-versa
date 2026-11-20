@@ -21,7 +21,13 @@ docs/
 │   ├── 0003-account-specific-tool-schema.md
 │   ├── 0004-migrate-from-prisma-to-typeorm.md
 │   ├── 0005-ai-assistant-agent-microservice.md
-│   └── 0007-integrate-adminjs-management-panel.md
+│   ├── 0006-integrate-swagger-openapi-documentation.md
+│   ├── 0007-integrate-adminjs-management-panel.md   (superseded by 0012)
+│   ├── 0008-generic-record-entry-and-multi-interval-analytics.md
+│   ├── 0009-app-ownership-and-centralized-authorization.md
+│   ├── 0010-migration-managed-schema-and-sql-analytics.md
+│   ├── 0011-frontend-session-and-data-loading.md
+│   └── 0012-shared-observability-library-and-tooling-cleanup.md
 ├── task/                        # Task History & Feature Tracking Directory
 │   ├── task-index.md            # Master task log index table
 │   ├── 0001-initial-project-setup.md

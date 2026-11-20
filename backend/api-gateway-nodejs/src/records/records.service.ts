@@ -1,7 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, Between, MoreThanOrEqual, LessThanOrEqual } from 'typeorm';
-import { AppRecord } from '../../../../libs/db/src';
+import { Repository, Between, MoreThanOrEqual, LessThanOrEqual, type FindOptionsWhere } from 'typeorm';
+import { AppRecord } from '../db';
+import { AppAccessService } from '../auth/app-access.service';
 import { CreateRecordDto } from './dto/create-record.dto';
 import { QueryRecordsDto } from './dto/query-records.dto';
 
@@ -10,6 +11,7 @@ export class RecordsService {
   constructor(
     @InjectRepository(AppRecord)
     private readonly recordRepository: Repository<AppRecord>,
+    private readonly appAccessService: AppAccessService,
   ) {}
 
   async create(userId: string, dto: CreateRecordDto): Promise<AppRecord> {
@@ -29,10 +31,12 @@ export class RecordsService {
   }
 
   async findAllForApp(userId: string, query: QueryRecordsDto): Promise<AppRecord[]> {
-    const whereClause: any = {
-      app_id: query.app_id,
-      user_id: userId,
-    };
+    // Same visibility as GET /apps/:id/records: anyone with read access to the app
+    // sees all of its records; `mine=true` narrows to the caller's own records.
+    const whereClause: FindOptionsWhere<AppRecord> = { app_id: query.app_id };
+    if (query.mine) {
+      whereClause.user_id = userId;
+    }
 
     if (query.startDate && query.endDate) {
       whereClause.record_date = Between(query.startDate, query.endDate);
@@ -48,16 +52,32 @@ export class RecordsService {
     });
   }
 
-  async findOne(recordId: string): Promise<AppRecord> {
+  /**
+   * Loads a record and checks the caller's permission on the record's app.
+   * Unknown records and records on apps the caller cannot see both return 404,
+   * so record IDs cannot be probed.
+   */
+  async findOneForUser(
+    userId: string,
+    recordId: string,
+    required: 'read' | 'write' = 'read',
+  ): Promise<AppRecord> {
     const record = await this.recordRepository.findOne({ where: { id: recordId } });
-    if (!record) {
-      throw new NotFoundException(`Calculation record "${recordId}" not found`);
+    const notFound = new NotFoundException(`Calculation record "${recordId}" not found`);
+    if (!record) throw notFound;
+
+    const access = await this.appAccessService.getAccess(userId, record.app_id);
+    if (!access) throw notFound;
+    if (!access[required]) {
+      throw new ForbiddenException(
+        `Access denied: You do not have '${required}' permission for this record's app`,
+      );
     }
     return record;
   }
 
-  async remove(recordId: string): Promise<{ message: string }> {
-    const record = await this.findOne(recordId);
+  async removeForUser(userId: string, recordId: string): Promise<{ message: string }> {
+    const record = await this.findOneForUser(userId, recordId, 'write');
     await this.recordRepository.remove(record);
     return { message: `Calculation record "${recordId}" deleted successfully` };
   }

@@ -1,5 +1,5 @@
 import { Module, NestModule, MiddlewareConsumer } from '@nestjs/common';
-import { TypeOrmModule } from '@nestjs/typeorm';
+import { TypeOrmModule, TypeOrmModuleOptions } from '@nestjs/typeorm';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
@@ -8,37 +8,15 @@ import { RecordsModule } from './records/records.module';
 import { PermissionsModule } from './permissions/permissions.module';
 import { AdminModule } from './admin/admin.module';
 import { CorrelationIdMiddleware } from './common/middleware/correlation-id.middleware';
-import {
-  User,
-  App,
-  UsersNAppMapping,
-  Permission,
-  UserPermission,
-  AppRecord,
-} from '../../../libs/db/src';
-
-const defaultPort = process.env.DB_HOST === 'postgres' ? '5432' : '5435';
+import { DatabaseMigrationService } from './common/database/database-migration.service';
+import { dataSourceOptions } from './db';
 
 @Module({
   imports: [
-    TypeOrmModule.forRoot({
-      type: 'postgres',
-      host: process.env.DB_HOST || 'localhost',
-      port: parseInt(process.env.DB_PORT || defaultPort, 10),
-      username: process.env.DB_USER || 'calcversa_user',
-      password: process.env.DB_PASSWORD || 'calcversa_pass',
-      database: process.env.DB_NAME || 'calcversa',
-      entities: [
-        User,
-        App,
-        UsersNAppMapping,
-        Permission,
-        UserPermission,
-        AppRecord,
-      ],
-      synchronize: process.env.NODE_ENV !== 'production',
-      logging: process.env.NODE_ENV === 'development',
-    }),
+    // Connection, entities and migrations come from libs/db so the gateway, CLI and
+    // seeds share one definition. Schema changes go through migrations (see ADR 0010).
+    // libs/db resolves its own `typeorm` copy, hence the cast; the runtime shape is identical.
+    TypeOrmModule.forRoot(dataSourceOptions as unknown as TypeOrmModuleOptions),
     AuthModule,
     AppsModule,
     RecordsModule,
@@ -46,7 +24,7 @@ const defaultPort = process.env.DB_HOST === 'postgres' ? '5432' : '5435';
     AdminModule,
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [AppService, DatabaseMigrationService],
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {

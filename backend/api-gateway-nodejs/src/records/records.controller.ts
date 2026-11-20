@@ -7,7 +7,7 @@ import {
   Query,
   Param,
   UseGuards,
-  Request,
+  ParseUUIDPipe,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { RecordsService } from './records.service';
@@ -16,6 +16,7 @@ import { QueryRecordsDto } from './dto/query-records.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { AppPermissionGuard } from '../auth/guards/app-permission.guard';
 import { RequireAppPermission } from '../auth/decorators/require-permission.decorator';
+import { CurrentUser, type AuthenticatedUser } from '../auth/current-user.decorator';
 
 @ApiTags('Records')
 @ApiBearerAuth()
@@ -30,8 +31,8 @@ export class RecordsController {
   @ApiOperation({ summary: 'Submit user inputs and calculation results log entry' })
   @ApiResponse({ status: 201, description: 'Calculation record logged successfully' })
   @ApiResponse({ status: 403, description: 'Forbidden - User lacks write permission for this app' })
-  async create(@Request() req: any, @Body() dto: CreateRecordDto) {
-    return this.recordsService.create(req.user.id, dto);
+  async create(@CurrentUser() user: AuthenticatedUser, @Body() dto: CreateRecordDto) {
+    return this.recordsService.create(user.id, dto);
   }
 
   @Get()
@@ -40,21 +41,23 @@ export class RecordsController {
   @ApiOperation({ summary: 'Query date-range calculation records for an app (weekly, monthly, yearly reports)' })
   @ApiResponse({ status: 200, description: 'Filtered list of calculation records' })
   @ApiResponse({ status: 403, description: 'Forbidden - User lacks read permission for this app' })
-  async findAll(@Request() req: any, @Query() query: QueryRecordsDto) {
-    return this.recordsService.findAllForApp(req.user.id, query);
+  async findAll(@CurrentUser() user: AuthenticatedUser, @Query() query: QueryRecordsDto) {
+    return this.recordsService.findAllForApp(user.id, query);
   }
 
   @Get(':id')
   @ApiOperation({ summary: 'Get specific calculation record by ID' })
   @ApiResponse({ status: 200, description: 'Calculation record details' })
-  async findOne(@Param('id') id: string) {
-    return this.recordsService.findOne(id);
+  @ApiResponse({ status: 404, description: 'Record not found or not accessible' })
+  async findOne(@CurrentUser() user: AuthenticatedUser, @Param('id', ParseUUIDPipe) id: string) {
+    return this.recordsService.findOneForUser(user.id, id, 'read');
   }
 
   @Delete(':id')
   @ApiOperation({ summary: 'Delete calculation record' })
   @ApiResponse({ status: 200, description: 'Calculation record deleted successfully' })
-  async remove(@Param('id') id: string) {
-    return this.recordsService.remove(id);
+  @ApiResponse({ status: 403, description: 'Forbidden - User lacks write permission for the record\'s app' })
+  async remove(@CurrentUser() user: AuthenticatedUser, @Param('id', ParseUUIDPipe) id: string) {
+    return this.recordsService.removeForUser(user.id, id);
   }
 }

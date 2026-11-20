@@ -25,20 +25,23 @@
    - `GET /apps`: List tools accessible to the logged-in user.
    - `GET /apps/:id`: Retrieve tool metadata and schema configs (`@RequireAppPermission('read')`).
    - `PUT /apps/:id`: Update tool configurations (`@RequireAppPermission('write')`).
-   - `DELETE /apps/:id`: Delete tool instance (`@RequireAppPermission('write')`).
-   - `POST /apps/:id/share`: Share access with another user account (`targetUsernameOrEmail`, `read`, `write`).
+   - `DELETE /apps/:id`: Delete tool instance (`@RequireAppPermission('owner')`).
+   - `POST /apps/:id/share`: Share access with another user account (`targetUsernameOrEmail`, `read`, `write`) (`@RequireAppPermission('owner')`).
 4. **App Records & Report Data Logging (`/records`)**:
    - `POST /records`: Submit daily user inputs (`payload`) and calculated outputs (`results`) (`@RequireAppPermission('write')`).
-   - `GET /records`: Query date-range records for weekly/monthly/yearly reports (`app_id`, `startDate`, `endDate`) (`@RequireAppPermission('read')`).
+   - `GET /records`: Query date-range records for weekly/monthly/yearly reports (`app_id`, `startDate`, `endDate`, optional `mine=true`) (`@RequireAppPermission('read')`). Returns all of the app's records, like `GET /apps/:id/records`; `mine=true` narrows to the caller's own.
+   - `POST /apps/:id/aggregate`: Totals and per-member/category/day/month breakdowns, computed in a single Postgres query (`RecordAnalyticsService`). Field roles can be set per tool in `uiConfig.analytics` (`amountField`, `memberField`, `categoryField`); otherwise name-based heuristics apply.
    - `GET /records/:id`: Retrieve specific calculation record.
    - `DELETE /records/:id`: Delete calculation record.
 5. **User Permission & Access Control Management (`/permissions` & `/apps/:id/permissions`)**:
    - `GET /permissions/me`: List all calculator tool permission grants for the logged-in user across all tools.
-   - `GET /apps/:id/permissions`: List all user access grants and read/write permission levels for an app (`@RequireAppPermission('write')`).
-   - `PUT /apps/:id/permissions/:userId`: Update user read/write access level for an app (`@RequireAppPermission('write')`).
-   - `DELETE /apps/:id/permissions/:userId`: Revoke a user's access mapping for an app (`@RequireAppPermission('write')`).
+   - `GET /apps/:id/permissions`: List all user access grants and read/write permission levels for an app (`@RequireAppPermission('owner')`).
+   - `PUT /apps/:id/permissions/:userId`: Update user read/write access level for an app (`@RequireAppPermission('owner')`).
+   - `DELETE /apps/:id/permissions/:userId`: Revoke a user's access mapping for an app (`@RequireAppPermission('owner')`).
 6. **Multi-Tenant App Permission Authorization (`AppPermissionGuard`)**:
-   - Uses `@RequireAppPermission('read' | 'write')` decorator.
+   - Uses `@RequireAppPermission('read' | 'write' | 'owner')` decorator; decisions live in `AppAccessService` (see [ADR 0009](../adr/0009-app-ownership-and-centralized-authorization.md)).
+   - App ID comes from the route `:id` when present, else `app_id` in body/query (conflicting values → 400).
+   - `owner` (`UsersNAppMapping.is_owner`) is required to share, manage permissions or delete; a mapping without permission rows is read-only.
    - Queries `UsersNAppMapping` and `UserPermission` (`libs/db/src/entities/`) to enforce strict user-to-app data isolation.
    - Denies any cross-tenant CRUD attempt with a `403 Forbidden` response.
 7. **User Action Audit Logging (`LoggingInterceptor`)**:

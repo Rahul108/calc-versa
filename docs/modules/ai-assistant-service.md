@@ -13,6 +13,8 @@
 
 ## Core Responsibilities & RAG Endpoints
 
+> **Authentication**: every `/agent/*` route requires `Authorization: Bearer <CalcVersa JWT>`. `GatewayAuthGuard` verifies it via the API Gateway's `GET /auth/me` (cached 60s) and the same token is used for any calls back to the gateway. See [ADR 0009](../adr/0009-app-ownership-and-centralized-authorization.md).
+
 1. **Tool Feasibility Analysis & Dry-Run (`POST /agent/feasibility`)**:
    - Analyzes user requirement prompt against system capabilities (`inputsConfig` controls & `formulaConfig` math rules).
    - Runs `Formula Expression Sanitizer` (`common/sanitizer.ts`) blocking code injection.
@@ -29,9 +31,14 @@
 
 ---
 
+## Model Output & Honest Endpoints
+- Feasibility and schema-update prompts run Gemini in **JSON mode** (`responseMimeType: application/json`, 30s timeout); replies are parsed with `parseModelJson`, falling back to built-in schemas only when no JSON object can be read.
+- `GET|POST /agent/report` (`reportType=usage_summary`) returns the caller's live tool counts from the API Gateway. Other report types return 501.
+- `POST /agent/operate` returns **501 Not Implemented**; it previously claimed success without doing anything.
+
 ## Zero-Trust Safety Guardrails
 - **2-Step Explicit Human Confirmation**: Database creation and updates are **NEVER** executed automatically without `user_confirmed: true`.
-- **Formula Expression Sanitizer**: Validates expressions against a whitelist of arithmetic operators (`+`, `-`, `*`, `/`, `^`, `**`, `()`) and registered input fields.
+- **Formula Expression Sanitizer**: Validates expressions against a whitelist of arithmetic operators (`+`, `-`, `*`, `/`, `^`, `**`, `()`) and blocks code-like keywords as whole words only (so `important_rate` is allowed, `import` is not).
 - **Git Secret Protection**: Local `.env` secrets protected by root `.gitignore` rules (`.env*`, `*.env`).
 
 ---

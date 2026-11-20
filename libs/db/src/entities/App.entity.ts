@@ -14,7 +14,8 @@ export class App {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
 
-  @Column({ unique: true })
+  /** Not globally unique: names are scoped per owner (enforced in AppsService). */
+  @Column()
   name!: string;
 
   @Column()
