@@ -1,50 +1,24 @@
-import {
-  Injectable,
-  NestInterceptor,
-  ExecutionContext,
-  CallHandler,
-} from '@nestjs/common';
+import { Injectable, NestInterceptor, ExecutionContext, CallHandler } from '@nestjs/common';
 import { Observable } from 'rxjs';
 import { tap } from 'rxjs/operators';
-import { CORRELATION_ID_HEADER } from '../middleware/correlation-id.middleware';
-import { FileLogger } from '../logging/file-logger.util';
+import { Request, Response } from 'express';
+import { SERVICE_NAME, buildAccessLog, logWriter, resolveCorrelationId } from '../observability';
 
+/** Logs every successful request (failures are logged by AllExceptionsFilter). */
 @Injectable()
 export class LoggingInterceptor implements NestInterceptor {
-  intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
-    const httpContext = context.switchToHttp();
-    const request = httpContext.getRequest();
-    const response = httpContext.getResponse();
-
-    const { method, originalUrl, ip, headers } = request;
-    const correlationId =
-      headers[CORRELATION_ID_HEADER] || (request as any).correlationId || 'N/A';
-    const userAgent = headers['user-agent'] || 'Unknown';
+  intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
+    const http = context.switchToHttp();
+    const request = http.getRequest<Request>();
+    const response = http.getResponse<Response>();
     const startTime = Date.now();
 
     return next.handle().pipe(
       tap(() => {
-        const durationMs = Date.now() - startTime;
-        const statusCode = response.statusCode;
-
-        const logPayload = {
-          timestamp: new Date().toISOString(),
-          level: 'INFO',
-          service: 'api-gateway-nodejs',
-          correlation_id: correlationId,
-          request: {
-            method,
-            url: originalUrl,
-            origin_ip: ip || request.socket?.remoteAddress || '127.0.0.1',
-            user_agent: userAgent,
-          },
-          duration_ms: durationMs,
-          status_code: statusCode,
-          message: `${method} ${originalUrl} ${statusCode} - ${durationMs}ms`,
-        };
-
-        // Write to stdout and app-<date>.log
-        FileLogger.logInfo(logPayload);
+        const correlationId = request.correlationId ?? resolveCorrelationId(request.headers);
+        logWriter.info(
+          buildAccessLog(SERVICE_NAME, correlationId, request, response.statusCode, Date.now() - startTime),
+        );
       }),
     );
   }

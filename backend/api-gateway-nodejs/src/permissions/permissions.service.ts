@@ -7,22 +7,22 @@ import {
   UsersNAppMapping,
   App,
   User,
-} from '../../../../libs/db/src';
+} from '../db';
 import { UpdateUserPermissionDto } from './dto/update-user-permission.dto';
+import { AppAccessService } from '../auth/app-access.service';
 
 @Injectable()
 export class PermissionsService {
   constructor(
     @InjectRepository(UserPermission)
     private readonly userPermissionRepository: Repository<UserPermission>,
-    @InjectRepository(Permission)
-    private readonly permissionRepository: Repository<Permission>,
     @InjectRepository(UsersNAppMapping)
     private readonly mappingRepository: Repository<UsersNAppMapping>,
     @InjectRepository(App)
     private readonly appRepository: Repository<App>,
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
+    private readonly appAccess: AppAccessService,
   ) {}
 
   async getAppPermissions(appId: string): Promise<any[]> {
@@ -31,8 +31,14 @@ export class PermissionsService {
       relations: ['user', 'permission'],
     });
 
+    const owners = await this.mappingRepository.find({
+      where: { app_id: appId, is_owner: true },
+    });
+    const ownerIds = new Set(owners.map((m) => m.user_id));
+
     return userPerms.map((up) => ({
       user_id: up.user_id,
+      is_owner: ownerIds.has(up.user_id),
       username: up.user?.username,
       email: up.user?.email,
       read: up.permission?.read ?? false,
@@ -50,48 +56,9 @@ export class PermissionsService {
     if (!targetUser) {
       throw new NotFoundException(`User with ID "${targetUserId}" not found`);
     }
-
     const wantRead = dto.read ?? true;
     const wantWrite = dto.write ?? false;
-
-    let permission = await this.permissionRepository.findOne({
-      where: { read: wantRead, write: wantWrite },
-    });
-    if (!permission) {
-      permission = this.permissionRepository.create({
-        name: `perm_r${wantRead ? 1 : 0}_w${wantWrite ? 1 : 0}`,
-        read: wantRead,
-        write: wantWrite,
-      });
-      permission = await this.permissionRepository.save(permission);
-    }
-
-    let userPerm = await this.userPermissionRepository.findOne({
-      where: { user_id: targetUserId, app_id: appId },
-    });
-    if (userPerm) {
-      userPerm.permission_id = permission.id;
-    } else {
-      userPerm = this.userPermissionRepository.create({
-        user_id: targetUserId,
-        app_id: appId,
-        permission_id: permission.id,
-      });
-    }
-    await this.userPermissionRepository.save(userPerm);
-
-    // Ensure user mapping exists
-    let mapping = await this.mappingRepository.findOne({
-      where: { app_id: appId, user_id: targetUserId },
-    });
-    if (!mapping) {
-      mapping = this.mappingRepository.create({
-        app_id: appId,
-        user_id: targetUserId,
-        status: true,
-      });
-      await this.mappingRepository.save(mapping);
-    }
+    await this.appAccess.grant(appId, targetUserId, wantRead, wantWrite);
 
     return {
       message: `Permission updated successfully for user "${targetUser.username}" (read=${wantRead}, write=${wantWrite})`,
@@ -99,19 +66,7 @@ export class PermissionsService {
   }
 
   async revokeUserPermission(appId: string, targetUserId: string): Promise<{ message: string }> {
-    const userPerm = await this.userPermissionRepository.findOne({
-      where: { user_id: targetUserId, app_id: appId },
-    });
-    if (userPerm) {
-      await this.userPermissionRepository.remove(userPerm);
-    }
-
-    const mapping = await this.mappingRepository.findOne({
-      where: { app_id: appId, user_id: targetUserId },
-    });
-    if (mapping) {
-      await this.mappingRepository.remove(mapping);
-    }
+    await this.appAccess.revoke(appId, targetUserId);
 
     return { message: `Access revoked for user "${targetUserId}" on app "${appId}"` };
   }

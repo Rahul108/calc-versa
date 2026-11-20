@@ -8,10 +8,13 @@
   "scripts": {
     "build": "nest build",
     "format": "prettier --write \"src/**/*.ts\"",
-    "start": "nest start",
-    "start:dev": "nest start --watch",
-    "start:debug": "nest start --debug --watch",
-    "start:prod": "node dist/main"
+    "start": "nest start --entryFile backend/ai-assistant-service-nodejs/src/main",
+    "start:dev": "nest start --watch --entryFile backend/ai-assistant-service-nodejs/src/main",
+    "start:debug": "nest start --debug --watch --entryFile backend/ai-assistant-service-nodejs/src/main",
+    "start:prod": "node dist/backend/ai-assistant-service-nodejs/src/main.js",
+    "test": "jest",
+    "test:cov": "jest --coverage",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.0",
@@ -29,11 +32,31 @@
     "@nestjs/schematics": "^11.0.0",
     "@nestjs/testing": "^11.0.1",
     "@types/express": "^5.0.0",
+    "@types/jest": "^29.5.14",
     "@types/node": "^22.10.7",
+    "jest": "^29.7.0",
     "prettier": "^3.4.2",
+    "ts-jest": "^29.4.15",
     "ts-loader": "^9.5.2",
     "ts-node": "^10.9.2",
     "tsconfig-paths": "^4.2.0",
     "typescript": "^5.7.3"
+  },
+  "jest": {
+    "moduleFileExtensions": [
+      "js",
+      "json",
+      "ts"
+    ],
+    "rootDir": "src",
+    "roots": [
+      "<rootDir>",
+      "<rootDir>/../../../libs/observability/src"
+    ],
+    "testRegex": ".*\\.spec\\.ts$",
+    "transform": {
+      "^.+\\.(t|j)s$": "ts-jest"
+    },
+    "testEnvironment": "node"
   }
 }

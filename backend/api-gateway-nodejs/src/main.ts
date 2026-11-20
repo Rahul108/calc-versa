@@ -4,13 +4,16 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
+import { getCorsOrigins } from './common/config/cors.config';
+import { getJwtSecret } from './common/config/jwt.config';
 
 async function bootstrap() {
   const logger = new Logger('APIGateway');
+  getJwtSecret(); // fail fast on a missing/weak secret in production
   const app = await NestFactory.create(AppModule);
 
   app.enableCors({
-    origin: '*',
+    origin: getCorsOrigins(),
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
     credentials: true,
   });

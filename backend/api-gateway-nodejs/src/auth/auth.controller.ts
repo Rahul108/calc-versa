@@ -4,7 +4,6 @@ import {
   Get,
   Body,
   UseGuards,
-  Request,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -16,6 +15,8 @@ import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
+import { LoginRateLimitGuard } from '../common/guards/login-rate-limit.guard';
+import { CurrentUser, type AuthenticatedUser } from './current-user.decorator';
 
 @ApiTags('Authentication')
 @Controller('auth')
@@ -25,6 +26,7 @@ export class AuthController {
   @ApiOperation({ summary: 'Register a new account' })
   @ApiResponse({ status: 201, description: 'User account registered successfully' })
   @ApiResponse({ status: 409, description: 'Username or Email already registered' })
+  @UseGuards(LoginRateLimitGuard)
   @Post('register')
   async register(@Body() dto: RegisterDto) {
     return this.authService.register(dto);
@@ -33,6 +35,8 @@ export class AuthController {
   @ApiOperation({ summary: 'Login and obtain JWT access token' })
   @ApiResponse({ status: 200, description: 'Login successful, returns Bearer token' })
   @ApiResponse({ status: 401, description: 'Invalid credentials or inactive account' })
+  @ApiResponse({ status: 429, description: 'Too many login attempts' })
+  @UseGuards(LoginRateLimitGuard)
   @Post('login')
   async login(@Body() dto: LoginDto) {
     return this.authService.login(dto);
@@ -44,7 +48,7 @@ export class AuthController {
   @ApiResponse({ status: 401, description: 'Unauthorized / invalid token' })
   @UseGuards(JwtAuthGuard)
   @Get('me')
-  async getProfile(@Request() req: any) {
-    return this.authService.getProfile(req.user.id);
+  async getProfile(@CurrentUser() user: AuthenticatedUser) {
+    return this.authService.getProfile(user.id);
   }
 }

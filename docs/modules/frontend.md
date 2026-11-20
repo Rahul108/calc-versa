@@ -4,47 +4,60 @@
 `frontend/`
 
 ## Tech Stack
-- **Framework**: React 18
-- **Build Tool**: Vite
-- **Language**: TypeScript
-- **Styling**: Modern Vanilla CSS Design System with Glassmorphism
-- **Routing**: React Router DOM (`react-router-dom`)
-- **Port**: `4200` (Nx dev server)
+- **Framework**: React 18, TypeScript (strict)
+- **Build Tool**: Vite (route-level code splitting via `React.lazy`)
+- **Styling**: Vanilla CSS design system in `src/styles.css`. Light theme: warm-gray background, white cards, near-black text and primary buttons, one coral→pink accent (`--accent`, `--accent-2`) for highlights, focus rings and charts. Font: Geist / Geist Mono. Tokens live in `:root`; layout utilities (`.page`, `.stack`, `.row`, `.grid-2`, `.grid-form`), surfaces (`.card`), buttons (`.btn-primary`, `.btn-accent`, `.btn-secondary`, `.btn-ghost`), `.chip` filters, segmented `.tabs`, `.bar` / `.columns-chart` for analytics. Tailwind is configured but not used.
+- **Icons**: `components/Icon.tsx` (small inline SVG set, no dependency); `components/ToolIcon.tsx` gives each tool a stable coloured monogram.
+- **Routing**: React Router DOM
+- **Tests**: Jest + Testing Library (`npx jest -c frontend/jest.config.js`), Playwright e2e in `frontend-e2e/`
+
+## Configuration
+API base URLs are read at build time:
+
+| Variable | Default |
+| :--- | :--- |
+| `VITE_API_GATEWAY_URL` | `http://localhost:3005` |
+| `VITE_AI_ASSISTANT_URL` | `http://localhost:3006` |
+
+Set them in `frontend/.env.local` (template: `frontend/.env.example`) or as Docker build args (`infra/docker/.env`). The gateway's `CORS_ORIGINS` must include the origin the SPA is served from.
 
 ---
 
-## Core Responsibilities & Pages
+## Structure
+```
+frontend/src/app/
+├── app.tsx                  # Routes, lazy pages, AuthProvider
+├── auth/                    # AuthContext (session), RequireAuth / RequireAdmin
+├── config/                  # Build-time URLs (env.ts; Jest uses env.test-stub.ts)
+├── services/http.ts         # apiFetch: token, error messages, 401 handling
+├── services/api.ts          # Typed endpoint functions
+├── hooks/useAsync.ts        # Loading / error / reload for API calls
+├── lib/fields.ts            # inputsConfig normalisation, defaults, payload validation
+├── lib/format.ts            # Number / money / date helpers
+├── components/              # Navbar, DynamicField, Feedback (Loading/Error/Empty/Alert)
+├── pages/                   # Dashboard, Login, CreateTool, AiCopilot
+└── pages/product/           # ProductToolPage + FormEntryTab, RecordsTab, AnalyticsTab
+```
 
-1. **Tools Dashboard (`/` & `/tools`)**:
-   - Displays all created calculator tools with search filtering, status tags, creation timestamps, and direct "Launch Tool" links.
-
-2. **Dynamic Product Tool Runner (`/product?id=<tool-id>`)**:
-   - Accessible via dedicated URLs (`http://localhost:4200/product?id=91956cd2-45e0-40f8-b378-c81fd2c3438d`).
-   - Dynamically parses `inputsConfig.sections` rendering numbers, sliders (with real-time value pill badges), dropdowns, and checkboxes.
-   - Triggers real-time formula computation via Go Compute Engine (`POST /apps/:id/calculate`) with `<2ms` response latency!
-
-3. **Creative Tool Builder (`/create`)**:
-   - Visual tool constructor allowing users to add sections, input fields (type, label, min/max, defaults), and formula expression rules with live side-by-side preview!
-
-4. **AI Prompt Copilot (`/ai-copilot`)**:
-   - User types plain English requirement prompts.
-   - Evaluates tool feasibility (`POST /agent/feasibility`) using Google Gemini 2.5 Flash API.
-   - Generates AI Dry-Run Draft Preview Cards with confidence scores and explicit 2-step "Approve & Instantiate Tool" button (`user_confirmed: true`).
-
-5. **User Authentication (`/login`)**:
-   - JWT authentication state management storing access token in `localStorage`.
+## Behaviour
+- **Session**: the JWT is kept in `localStorage` and validated with `GET /auth/me` on load. Any 401, or reaching the token's `exp`, logs the user out and returns them to `/login`; after logging in they go back to the page they wanted (including `?id=`).
+- **No placeholder data**: failed requests show the server's error with a retry button. The UI never substitutes mock tools, records or results.
+- **Access-aware tool page**: `GET /apps/:id` includes `access` (`read` / `write` / `owner`). Read-only users can calculate but not save, and don't see delete buttons.
+- **Field types**: `number`, `slider`, `select` (also accepts `dropdown`), `checkbox`, `text`, `date`. Number fields are validated client-side and sent as numbers.
+- **Tool metadata used by the UI** (`uiConfig`): `toolType` (`tracker` saves every entry; otherwise calculate on demand), `currency`, `summaryMetrics[0].label`, `analytics.amountField`. `formulaConfig.outputs[]` gives result labels and `format` (`currency`, `percent`, `number`).
+- **Creator pages** (`/create`, `/ai-copilot`) are shown only to admins. The API itself allows any signed-in user to create tools.
 
 ---
 
-## Key Page Routes
+## Routes
 
-| Route | Component | Description |
+| Route | Component | Access |
 | :--- | :--- | :--- |
-| `/` or `/tools` | `DashboardPage.tsx` | Tools list dashboard with search & stats |
-| `/product?id=:id` | `ProductToolPage.tsx` | Dynamic tool runner & real-time Go formula execution |
-| `/create` | `CreateToolPage.tsx` | Visual tool constructor with live preview |
-| `/ai-copilot` | `AiCopilotPage.tsx` | AI prompt copilot with 2-step tool creation |
-| `/login` | `LoginPage.tsx` | User authentication page |
+| `/` | `pages/DashboardPage.tsx` | Signed in |
+| `/product?id=:id` | `pages/product/ProductToolPage.tsx` | Signed in + app access |
+| `/create` | `pages/CreateToolPage.tsx` | Admin |
+| `/ai-copilot` | `pages/AiCopilotPage.tsx` | Admin |
+| `/login` | `pages/LoginPage.tsx` | Public |
 
 ---
 
@@ -52,3 +65,5 @@
 - `docs/architecture/overview.md`
 - `docs/guides/creating-a-calculator-tool.md`
 - `docs/task/0013-frontend-interactive-dashboard.md`
+- `docs/task/0019-frontend-fixes.md`
+- `docs/adr/0011-frontend-session-and-data-loading.md`

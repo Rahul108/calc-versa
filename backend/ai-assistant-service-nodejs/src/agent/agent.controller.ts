@@ -1,4 +1,5 @@
-import { Controller, Post, Get, Body, Query, Headers } from '@nestjs/common';
+import { Controller, Post, Get, Body, Query, Headers, UseGuards } from '@nestjs/common';
+import { GatewayAuthGuard } from '../common/guards/gateway-auth.guard';
 import { AgentService } from './agent.service';
 import { GuidePromptDto } from '../dto/guide-prompt.dto';
 import { OperatePromptDto } from '../dto/operate-prompt.dto';
@@ -7,6 +8,7 @@ import { FeasibilityPromptDto } from '../dto/feasibility-prompt.dto';
 import { CreateToolPromptDto } from '../dto/create-tool-prompt.dto';
 import { UpdateToolPromptDto } from '../dto/update-tool-prompt.dto';
 
+@UseGuards(GatewayAuthGuard)
 @Controller('agent')
 export class AgentController {
   constructor(private readonly agentService: AgentService) {}
@@ -17,18 +19,15 @@ export class AgentController {
   }
 
   @Post('create-tool')
-  async createTool(@Body() dto: CreateToolPromptDto, @Headers('authorization') authHeader?: string) {
-    if (!dto.userToken && authHeader) {
-      dto.userToken = authHeader;
-    }
+  async createTool(@Body() dto: CreateToolPromptDto, @Headers('authorization') authHeader: string) {
+    // Always act with the token the guard verified, never one supplied in the body.
+    dto.userToken = authHeader;
     return this.agentService.createTool(dto);
   }
 
   @Post('update-tool')
-  async updateTool(@Body() dto: UpdateToolPromptDto, @Headers('authorization') authHeader?: string) {
-    if (!dto.userToken && authHeader) {
-      dto.userToken = authHeader;
-    }
+  async updateTool(@Body() dto: UpdateToolPromptDto, @Headers('authorization') authHeader: string) {
+    dto.userToken = authHeader;
     return this.agentService.updateTool(dto);
   }
 
@@ -43,12 +42,12 @@ export class AgentController {
   }
 
   @Get('report')
-  async getReportGet(@Query() dto: ReportRequestDto) {
-    return this.agentService.getReport(dto);
+  async getReportGet(@Query() dto: ReportRequestDto, @Headers('authorization') authHeader: string) {
+    return this.agentService.getReport(dto, authHeader);
   }
 
   @Post('report')
-  async getReportPost(@Body() dto: ReportRequestDto) {
-    return this.agentService.getReport(dto);
+  async getReportPost(@Body() dto: ReportRequestDto, @Headers('authorization') authHeader: string) {
+    return this.agentService.getReport(dto, authHeader);
   }
 }

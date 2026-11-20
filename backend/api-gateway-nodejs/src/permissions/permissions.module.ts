@@ -8,7 +8,8 @@ import {
   UsersNAppMapping,
   App,
   User,
-} from '../../../../libs/db/src';
+} from '../db';
+import { AppAccessModule } from '../auth/app-access.module';
 
 @Module({
   imports: [
@@ -19,6 +20,7 @@ import {
       App,
       User,
     ]),
+    AppAccessModule,
   ],
   controllers: [PermissionsController],
   providers: [PermissionsService],

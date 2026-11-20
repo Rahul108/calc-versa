@@ -12,20 +12,23 @@ export function sanitizeFormulaExpression(expr: string): string {
   const trimmed = expr.trim();
 
   // Dangerous code injection patterns
+  // Whole-word matches only, so legitimate variable names such as
+  // `important_rate` or `cost_constructor_fee` are not rejected.
   const forbiddenPatterns = [
-    /eval\s*\(/i,
-    /function\s*\(/i,
-    /import\s*/i,
-    /require\s*\(/i,
-    /process\./i,
-    /global\./i,
-    /window\./i,
-    /document\./i,
+    /\beval\s*\(/i,
+    /\bfunction\b/i,
+    /\bimport\b/i,
+    /\brequire\s*\(/i,
+    /\bprocess\./i,
+    /\bglobal(This)?\./i,
+    /\bwindow\./i,
+    /\bdocument\./i,
     /<script/i,
-    /exec\s*\(/i,
-    /system\s*\(/i,
+    /\bexec\s*\(/i,
+    /\bsystem\s*\(/i,
     /__proto__/i,
-    /constructor/i,
+    /\bconstructor\b/i,
+    /\bprototype\b/i,
   ];
 
   for (const pattern of forbiddenPatterns) {

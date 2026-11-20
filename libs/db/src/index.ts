@@ -5,3 +5,5 @@ export * from './entities/Permission.entity';
 export * from './entities/UserPermission.entity';
 export * from './entities/AppRecord.entity';
 export * from './data-source';
+export * from './maintenance/backfill-app-owners';
+export * from './maintenance/run-migrations';

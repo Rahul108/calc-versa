@@ -8,9 +8,11 @@ import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as bcrypt from 'bcryptjs';
-import { User } from '../../../../libs/db/src';
+import { User } from '../db';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
+
+const DUMMY_BCRYPT_HASH = '$2a$10$fD0JwEuD8PqjlrR/1iHtEOLd0eq4jq8SmDs6Idta0CFrm1w9c.AS2';
 
 @Injectable()
 export class AuthService {
@@ -65,12 +67,13 @@ export class AuthService {
       ],
     });
 
-    if (!user || !user.status) {
-      throw new UnauthorizedException('Invalid credentials or inactive user account');
-    }
-
-    const isPasswordValid = await bcrypt.compare(dto.password, user.password);
-    if (!isPasswordValid) {
+    // One generic error and a bcrypt compare on every path, so neither the message
+    // nor the timing reveals whether the account exists or is inactive.
+    const isPasswordValid = await bcrypt.compare(
+      dto.password,
+      user?.password ?? DUMMY_BCRYPT_HASH,
+    );
+    if (!user || !isPasswordValid || !user.status) {
       throw new UnauthorizedException('Invalid credentials');
     }
 

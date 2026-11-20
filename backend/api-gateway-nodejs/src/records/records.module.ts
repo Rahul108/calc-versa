@@ -2,7 +2,8 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { RecordsController } from './records.controller';
 import { RecordsService } from './records.service';
-import { AppRecord, UsersNAppMapping, UserPermission, Permission } from '../../../../libs/db/src';
+import { AppRecord, UsersNAppMapping, UserPermission, Permission } from '../db';
+import { AppAccessModule } from '../auth/app-access.module';
 
 @Module({
   imports: [
@@ -12,6 +13,7 @@ import { AppRecord, UsersNAppMapping, UserPermission, Permission } from '../../.
       UserPermission,
       Permission,
     ]),
+    AppAccessModule,
   ],
   controllers: [RecordsController],
   providers: [RecordsService],

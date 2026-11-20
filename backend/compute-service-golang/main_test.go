@@ -3,8 +3,10 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"math"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -290,5 +292,47 @@ func TestHttpRoutes_EvaluateInvalidExpressionError(t *testing.T) {
 
 	if resp.StatusCode != 400 {
 		t.Errorf("Expected HTTP 400 for expression error, got: %d", resp.StatusCode)
+	}
+}
+
+// Regression: division by zero produced +Inf, which JSON cannot encode -> HTTP 500.
+func TestHttpRoutes_DivisionByZeroReturns400(t *testing.T) {
+	app := SetupApp()
+	body := []byte(`{"payload":{"a":1,"b":0},"formulaConfig":{"rules":[{"targetOutputId":"r","expression":"a / b"}]}}`)
+	req := httptest.NewRequest("POST", "/evaluate", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req, -1)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	if resp.StatusCode != 400 {
+		t.Fatalf("expected 400 for division by zero, got %d", resp.StatusCode)
+	}
+	var out map[string]interface{}
+	json.NewDecoder(resp.Body).Decode(&out)
+	if out["error"] != "EvaluationError" || !strings.Contains(fmt.Sprint(out["message"]), "non-finite") {
+		t.Fatalf("unexpected error body: %v", out)
+	}
+}
+
+func TestEvaluateFormula_NaNIsRejected(t *testing.T) {
+	req := EvaluateRequest{
+		Payload:       map[string]interface{}{"a": 0.0},
+		FormulaConfig: FormulaConfig{Rules: []FormulaRule{{TargetOutputID: "r", Expression: "a / a"}}},
+	}
+	if _, err := EvaluateFormulaRules(req); err == nil {
+		t.Fatal("expected an error for 0/0 (NaN)")
+	}
+}
+
+func TestCompileExpression_IsCached(t *testing.T) {
+	first, err := compileExpression("x * 2 + 1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, _ := compileExpression("x * 2 + 1")
+	if first != second {
+		t.Fatal("expected the second compile to return the cached expression")
 	}
 }

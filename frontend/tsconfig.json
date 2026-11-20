@@ -5,7 +5,18 @@
     "esModuleInterop": false,
     "allowSyntheticDefaultImports": true,
     "strict": true,
-    "types": ["vite/client"]
+    "types": [
+      "vite/client"
+    ],
+    "lib": [
+      "es2022",
+      "dom",
+      "dom.iterable"
+    ],
+    "noEmit": true,
+    "composite": false,
+    "emitDeclarationOnly": false,
+    "declarationMap": false
   },
   "files": [],
   "include": [],

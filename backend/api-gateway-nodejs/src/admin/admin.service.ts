@@ -2,7 +2,7 @@ import {
   Injectable,
   NotFoundException,
   UnauthorizedException,
-  ForbiddenException,
+  BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -15,7 +15,12 @@ import {
   Permission,
   UserPermission,
   AppRecord,
-} from '../../../../libs/db/src';
+} from '../db';
+import { getJwtSecret } from '../common/config/jwt.config';
+
+// bcrypt hash of a random string; compared against when the user does not exist
+// so that login timing does not reveal which usernames are registered.
+const DUMMY_BCRYPT_HASH = '$2a$10$fD0JwEuD8PqjlrR/1iHtEOLd0eq4jq8SmDs6Idta0CFrm1w9c.AS2';
 
 @Injectable()
 export class AdminService {
@@ -40,20 +45,10 @@ export class AdminService {
       where: [{ email: usernameOrEmail }, { username: usernameOrEmail }],
     });
 
-    if (!user) {
-      throw new UnauthorizedException('Invalid admin credentials');
-    }
-
-    if (!user.status) {
-      throw new ForbiddenException('User account is inactive');
-    }
-
-    if (!user.is_admin) {
-      throw new ForbiddenException('Access denied: Account lacks Super-Admin privileges');
-    }
-
-    const isMatch = await bcrypt.compare(passwordStr, user.password);
-    if (!isMatch) {
+    // Always run bcrypt and return one generic error, so the response does not
+    // reveal whether the account exists, is inactive, or is an admin.
+    const isMatch = await bcrypt.compare(passwordStr, user?.password ?? DUMMY_BCRYPT_HASH);
+    if (!user || !isMatch || !user.status || !user.is_admin) {
       throw new UnauthorizedException('Invalid admin credentials');
     }
 
@@ -65,7 +60,7 @@ export class AdminService {
     };
 
     const token = this.jwtService.sign(payload, {
-      secret: process.env.JWT_SECRET || 'calcversa_secret_jwt_key_2026',
+      secret: getJwtSecret(),
       expiresIn: '7d',
     });
 
@@ -103,14 +98,18 @@ export class AdminService {
     });
   }
 
-  async toggleAdminRole(userId: string, isAdmin: boolean) {
+  async toggleAdminRole(actingAdminId: string, userId: string, isAdmin: boolean) {
+    if (actingAdminId === userId && !isAdmin) {
+      throw new BadRequestException('You cannot remove your own Super-Admin role');
+    }
     const user = await this.userRepository.findOne({ where: { id: userId } });
     if (!user) {
       throw new NotFoundException(`User "${userId}" not found`);
     }
     user.is_admin = isAdmin;
     await this.userRepository.save(user);
-    return { message: `User "${user.username}" admin status updated to ${isAdmin}`, user };
+    const { password, ...safeUser } = user;
+    return { message: `User "${user.username}" admin status updated to ${isAdmin}`, user: safeUser };
   }
 
   async getAllApps() {

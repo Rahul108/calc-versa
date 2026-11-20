@@ -1,4 +1,5 @@
-import { IsNotEmpty, IsOptional, IsUUID, IsDateString } from 'class-validator';
+import { IsNotEmpty, IsOptional, IsUUID, IsDateString, IsBoolean } from 'class-validator';
+import { Transform } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class QueryRecordsDto {
@@ -16,4 +17,13 @@ export class QueryRecordsDto {
   @IsOptional()
   @IsDateString()
   endDate?: string;
+
+  @ApiPropertyOptional({
+    example: false,
+    description: 'Only return records created by the current user (default: all records of the app)',
+  })
+  @IsOptional()
+  @Transform(({ value }) => value === true || value === 'true')
+  @IsBoolean()
+  mine?: boolean;
 }

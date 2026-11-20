@@ -1,268 +1,341 @@
-import React, { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
-import { createApp } from '../services/api';
+import { useMemo, useState, type FormEvent } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { api } from '../services/api';
+import { Alert } from '../components/Feedback';
+import { Icon } from '../components/Icon';
+import { DynamicField } from '../components/DynamicField';
+import { defaultValues, getSections, type FieldValue } from '../lib/fields';
+import type { FieldConfig, ToolDraft } from '../types';
 
-export const CreateToolPage: React.FC = () => {
+type BuilderType = 'number' | 'slider' | 'dropdown' | 'checkbox' | 'text' | 'date';
+
+interface BuilderField {
+  key: number;
+  id: string;
+  label: string;
+  type: BuilderType;
+  defaultValue: string;
+  options: string;
+  min: string;
+  max: string;
+}
+
+interface BuilderRule {
+  key: number;
+  outputId: string;
+  label: string;
+  expression: string;
+  format: 'number' | 'currency' | 'percent';
+}
+
+const IDENTIFIER = /^[A-Za-z_][A-Za-z0-9_]*$/;
+let nextKey = 1;
+const newKey = () => nextKey++;
+
+const STARTER_FIELDS: BuilderField[] = [
+  { key: newKey(), id: 'principal', label: 'Loan amount', type: 'number', defaultValue: '250000', options: '', min: '', max: '' },
+  { key: newKey(), id: 'annual_rate', label: 'Interest rate (%)', type: 'slider', defaultValue: '6.5', options: '', min: '1', max: '20' },
+];
+const STARTER_RULES: BuilderRule[] = [
+  {
+    key: newKey(),
+    outputId: 'monthly_payment',
+    label: 'Monthly payment',
+    expression: '(principal * (annual_rate / 1200)) / (1 - (1 + (annual_rate / 1200)) ** -360)',
+    format: 'currency',
+  },
+];
+
+function toFieldConfig(f: BuilderField): FieldConfig {
+  const num = (s: string) => (s.trim() === '' ? undefined : Number(s));
+  const numeric = f.type === 'number' || f.type === 'slider';
+  return {
+    id: f.id.trim(),
+    label: f.label.trim() || f.id.trim(),
+    type: f.type,
+    defaultValue: numeric ? num(f.defaultValue) : f.type === 'checkbox' ? f.defaultValue === 'true' : f.defaultValue,
+    ...(f.type === 'dropdown' ? { options: f.options.split(',').map((o) => o.trim()).filter(Boolean) } : {}),
+    ...(f.type === 'slider' ? { min: num(f.min), max: num(f.max) } : {}),
+  };
+}
+
+function validate(name: string, fields: BuilderField[], rules: BuilderRule[]): string[] {
+  const problems: string[] = [];
+  if (!name.trim()) problems.push('Tool name is required.');
+  const ids = new Set<string>();
+  fields.forEach((f, i) => {
+    const id = f.id.trim();
+    if (!IDENTIFIER.test(id)) problems.push(`Field ${i + 1}: ID "${id}" must start with a letter or _ and use only letters, digits and _.`);
+    else if (ids.has(id)) problems.push(`Field ID "${id}" is used more than once.`);
+    ids.add(id);
+    if (f.type === 'dropdown' && !f.options.trim()) problems.push(`Field "${id}": add at least one dropdown option.`);
+  });
+  rules.forEach((r, i) => {
+    const out = r.outputId.trim();
+    if (!IDENTIFIER.test(out)) problems.push(`Formula ${i + 1}: output name "${out}" must be a valid identifier.`);
+    else if (ids.has(out)) problems.push(`Output "${out}" clashes with a field or another output.`);
+    ids.add(out);
+    if (!r.expression.trim()) problems.push(`Formula ${i + 1}: expression is required.`);
+  });
+  return problems;
+}
+
+export default function CreateToolPage() {
   const navigate = useNavigate();
-
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
-  const [fields, setFields] = useState<any[]>([
-    { id: 'principal', label: 'Loan Amount', type: 'number', defaultValue: 250000 },
-    { id: 'annual_rate', label: 'Interest Rate (%)', type: 'slider', min: 1, max: 20, defaultValue: 6.5 },
-  ]);
-  const [outputId, setOutputId] = useState('monthly_payment');
-  const [expression, setExpression] = useState('(principal * (annual_rate / 1200)) / (1 - (1 + (annual_rate / 1200)) ** -360)');
+  const [toolType, setToolType] = useState<'calculator' | 'tracker'>('calculator');
+  const [currency, setCurrency] = useState('$');
+  const [fields, setFields] = useState<BuilderField[]>(STARTER_FIELDS);
+  const [rules, setRules] = useState<BuilderRule[]>(STARTER_RULES);
+  const [problems, setProblems] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
-  const addField = () => {
-    const newId = `field_${fields.length + 1}`;
-    setFields([...fields, { id: newId, label: `Custom Parameter ${fields.length + 1}`, type: 'number', defaultValue: 100 }]);
-  };
+  const updateField = (key: number, patch: Partial<BuilderField>) =>
+    setFields((prev) => prev.map((f) => (f.key === key ? { ...f, ...patch } : f)));
+  const updateRule = (key: number, patch: Partial<BuilderRule>) =>
+    setRules((prev) => prev.map((r) => (r.key === key ? { ...r, ...patch } : r)));
 
-  const updateField = (index: number, key: string, val: any) => {
-    const updated = [...fields];
-    updated[index][key] = val;
-    setFields(updated);
-  };
+  const previewSections = useMemo(
+    () => getSections({ sections: [{ title: 'Inputs', fields: fields.map(toFieldConfig) }] }),
+    [fields],
+  );
+  const previewValues = useMemo<Record<string, FieldValue>>(
+    () => defaultValues(previewSections.flatMap((s) => s.fields)),
+    [previewSections],
+  );
 
-  const removeField = (index: number) => {
-    setFields(fields.filter((_, i) => i !== index));
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
+  const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    if (!name.trim()) {
-      setError('Tool name is required.');
-      return;
-    }
+    const found = validate(name, fields, rules);
+    setProblems(found);
+    if (found.length) return;
+
+    const draft: ToolDraft = {
+      name: name.trim(),
+      description: description.trim() || name.trim(),
+      inputsConfig: { sections: [{ title: 'Inputs', fields: fields.map(toFieldConfig) }] },
+      formulaConfig: {
+        rules: rules.map((r) => ({ targetOutputId: r.outputId.trim(), expression: r.expression.trim() })),
+        outputs: rules.map((r) => ({ id: r.outputId.trim(), label: r.label.trim() || r.outputId.trim(), format: r.format })),
+      },
+      uiConfig: { toolType, currency },
+    };
 
     setSubmitting(true);
     setError('');
-
-    const payload = {
-      name,
-      description,
-      inputsConfig: {
-        sections: [
-          {
-            title: 'User Input Parameters',
-            fields,
-          },
-        ],
-      },
-      formulaConfig: {
-        rules: [
-          {
-            targetOutputId: outputId,
-            expression,
-          },
-        ],
-      },
-      uiConfig: { theme: 'dark', primaryColor: '#6366f1' },
-    };
-
     try {
-      const created = await createApp(payload);
+      const created = await api.createApp(draft);
       navigate(`/product?id=${created.id}`);
-    } catch (err: any) {
-      setError(err.message || 'Failed to create tool.');
+    } catch (err) {
+      setError((err as Error).message);
     } finally {
       setSubmitting(false);
     }
   };
 
   return (
-    <div style={{ maxWidth: '1200px', margin: '2rem auto', padding: '0 1.5rem' }}>
-      <div style={{ marginBottom: '1.5rem' }}>
-        <Link to="/" style={{ color: '#94a3b8', textDecoration: 'none', fontSize: '0.9rem' }}>
-          ← Back to Tools Dashboard
-        </Link>
+    <div className="page">
+      <Link to="/" className="back-link">
+        <Icon name="arrowLeft" size={15} /> All tools
+      </Link>
+      <div className="page-header">
+        <span className="eyebrow">Builder</span>
+        <h1 className="page-title">Create a tool</h1>
+        <p className="muted">Define inputs and formulas. Formulas can use any field ID and earlier outputs.</p>
       </div>
 
-      <div style={{ marginBottom: '2rem' }}>
-        <h2 style={{ fontSize: '2rem', fontWeight: 800 }} className="gradient-text">
-          Creative Tool Builder
-        </h2>
-        <p style={{ color: '#94a3b8', marginTop: '0.25rem' }}>
-          Visually configure custom form input fields, dynamic sliders, and mathematical formula rules
-        </p>
-      </div>
-
-      {error && (
-        <div style={{ background: 'rgba(239, 68, 68, 0.15)', color: '#fca5a5', border: '1px solid rgba(239, 68, 68, 0.3)', padding: '1rem', borderRadius: '0.75rem', marginBottom: '1.5rem' }}>
-          {error}
-        </div>
+      {error && <Alert kind="error">{error}</Alert>}
+      {problems.length > 0 && (
+        <Alert kind="error">
+          <strong>Please fix the following:</strong>
+          <ul className="problem-list">
+            {problems.map((p) => (
+              <li key={p}>{p}</li>
+            ))}
+          </ul>
+        </Alert>
       )}
 
-      <form onSubmit={handleSubmit}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(500px, 1fr))', gap: '2rem' }}>
-          {/* Left Column: Form Controls Configurator */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-            <div className="glass-card">
-              <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: '#fff', marginBottom: '1rem' }}>Tool Details</h3>
-              <div style={{ marginBottom: '1rem' }}>
-                <label className="form-label">Tool Name</label>
-                <input
-                  type="text"
-                  className="form-control"
-                  placeholder="e.g. Compound Interest Growth Tool"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  required
-                />
+      <form onSubmit={onSubmit} className="grid-2" noValidate>
+        <div className="stack">
+          <fieldset className="card stack">
+            <legend className="section-title">Tool details</legend>
+            <div className="field">
+              <label htmlFor="tool-name" className="form-label">Name</label>
+              <input id="tool-name" className="form-control" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Compound interest" required />
+            </div>
+            <div className="field">
+              <label htmlFor="tool-desc" className="form-label">Description</label>
+              <textarea id="tool-desc" className="form-control" rows={3} value={description} onChange={(e) => setDescription(e.target.value)} />
+            </div>
+            <div className="row wrap">
+              <div className="field">
+                <label htmlFor="tool-type" className="form-label">Kind</label>
+                <select id="tool-type" className="form-control" value={toolType} onChange={(e) => setToolType(e.target.value as 'calculator' | 'tracker')}>
+                  <option value="calculator">Calculator (calculate on demand)</option>
+                  <option value="tracker">Tracker (save every entry)</option>
+                </select>
               </div>
-              <div>
-                <label className="form-label">Description</label>
-                <textarea
-                  className="form-control"
-                  rows={3}
-                  placeholder="Describes what this calculation tool computes..."
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                />
+              <div className="field">
+                <label htmlFor="tool-currency" className="form-label">Currency</label>
+                <input id="tool-currency" className="form-control form-control-sm" value={currency} onChange={(e) => setCurrency(e.target.value)} />
               </div>
             </div>
+          </fieldset>
 
-            {/* Input Fields Builder */}
-            <div className="glass-card">
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: '#fff' }}>Input Form Controls</h3>
-                <button type="button" onClick={addField} className="btn-secondary" style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem' }}>
-                  + Add Input Field
-                </button>
-              </div>
-
-              {fields.map((field, idx) => (
-                <div key={idx} style={{ background: '#090d16', padding: '1rem', borderRadius: '0.5rem', border: '1px solid #23304d', marginBottom: '1rem' }}>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
-                    <div>
-                      <label className="form-label">Field ID (Variable Name)</label>
-                      <input
-                        type="text"
-                        className="form-control"
-                        value={field.id}
-                        onChange={(e) => updateField(idx, 'id', e.target.value)}
-                      />
-                    </div>
-                    <div>
-                      <label className="form-label">Display Label</label>
-                      <input
-                        type="text"
-                        className="form-control"
-                        value={field.label}
-                        onChange={(e) => updateField(idx, 'label', e.target.value)}
-                      />
-                    </div>
+          <fieldset className="card stack">
+            <legend className="section-title">Inputs</legend>
+            {fields.map((f, i) => (
+              <div key={f.key} className="builder-item stack">
+                <div className="grid-2-tight">
+                  <div className="field">
+                    <label htmlFor={`f-id-${f.key}`} className="form-label">Field ID</label>
+                    <input id={`f-id-${f.key}`} className="form-control mono" value={f.id} onChange={(e) => updateField(f.key, { id: e.target.value })} />
                   </div>
-
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: '0.75rem', alignItems: 'flex-end' }}>
-                    <div>
-                      <label className="form-label">Control Type</label>
-                      <select
-                        className="form-control"
-                        value={field.type}
-                        onChange={(e) => updateField(idx, 'type', e.target.value)}
-                      >
-                        <option value="number">Number Box</option>
-                        <option value="slider">Range Slider</option>
-                        <option value="dropdown">Dropdown Options</option>
+                  <div className="field">
+                    <label htmlFor={`f-label-${f.key}`} className="form-label">Label</label>
+                    <input id={`f-label-${f.key}`} className="form-control" value={f.label} onChange={(e) => updateField(f.key, { label: e.target.value })} />
+                  </div>
+                  <div className="field">
+                    <label htmlFor={`f-type-${f.key}`} className="form-label">Control</label>
+                    <select id={`f-type-${f.key}`} className="form-control" value={f.type} onChange={(e) => updateField(f.key, { type: e.target.value as BuilderType, defaultValue: '' })}>
+                      <option value="number">Number</option>
+                      <option value="slider">Slider</option>
+                      <option value="dropdown">Dropdown</option>
+                      <option value="checkbox">Checkbox</option>
+                      <option value="text">Text</option>
+                      <option value="date">Date</option>
+                    </select>
+                  </div>
+                  <div className="field">
+                    <label htmlFor={`f-def-${f.key}`} className="form-label">Default value</label>
+                    {f.type === 'checkbox' ? (
+                      <select id={`f-def-${f.key}`} className="form-control" value={f.defaultValue || 'false'} onChange={(e) => updateField(f.key, { defaultValue: e.target.value })}>
+                        <option value="false">Unchecked</option>
+                        <option value="true">Checked</option>
                       </select>
-                    </div>
-                    <div>
-                      <label className="form-label">Default Value</label>
+                    ) : (
                       <input
-                        type="number"
+                        id={`f-def-${f.key}`}
                         className="form-control"
-                        value={field.defaultValue}
-                        onChange={(e) => updateField(idx, 'defaultValue', Number(e.target.value))}
+                        type={f.type === 'number' || f.type === 'slider' ? 'number' : 'text'}
+                        placeholder={f.type === 'date' ? 'today or YYYY-MM-DD' : ''}
+                        value={f.defaultValue}
+                        onChange={(e) => updateField(f.key, { defaultValue: e.target.value })}
                       />
-                    </div>
-                    {fields.length > 1 && (
-                      <button
-                        type="button"
-                        onClick={() => removeField(idx)}
-                        style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '0.5rem' }}
-                      >
-                        ✕
-                      </button>
                     )}
+                  </div>
+                  {f.type === 'slider' && (
+                    <>
+                      <div className="field">
+                        <label htmlFor={`f-min-${f.key}`} className="form-label">Min</label>
+                        <input id={`f-min-${f.key}`} type="number" className="form-control" value={f.min} onChange={(e) => updateField(f.key, { min: e.target.value })} />
+                      </div>
+                      <div className="field">
+                        <label htmlFor={`f-max-${f.key}`} className="form-label">Max</label>
+                        <input id={`f-max-${f.key}`} type="number" className="form-control" value={f.max} onChange={(e) => updateField(f.key, { max: e.target.value })} />
+                      </div>
+                    </>
+                  )}
+                </div>
+                {f.type === 'dropdown' && (
+                  <div className="field">
+                    <label htmlFor={`f-opt-${f.key}`} className="form-label">Options (comma-separated)</label>
+                    <input id={`f-opt-${f.key}`} className="form-control" placeholder="Food, Rent, Utilities" value={f.options} onChange={(e) => updateField(f.key, { options: e.target.value })} />
+                  </div>
+                )}
+                {fields.length > 1 && (
+                  <button type="button" className="btn-secondary btn-sm align-start" onClick={() => setFields((prev) => prev.filter((x) => x.key !== f.key))}>
+                    Remove field {i + 1}
+                  </button>
+                )}
+              </div>
+            ))}
+            <button
+              type="button"
+              className="btn-secondary btn-sm align-start"
+              onClick={() =>
+                setFields((prev) => [
+                  ...prev,
+                  { key: newKey(), id: `field_${prev.length + 1}`, label: `Field ${prev.length + 1}`, type: 'number', defaultValue: '0', options: '', min: '', max: '' },
+                ])
+              }
+            >
+              <Icon name="plus" size={15} /> Add input
+            </button>
+          </fieldset>
+
+          <fieldset className="card stack">
+            <legend className="section-title">Formulas</legend>
+            <p className="muted small">
+              Operators: <code>+ - * / ^ **</code> and parentheses. Rules run in order, so later formulas can use earlier outputs.
+            </p>
+            {rules.map((r, i) => (
+              <div key={r.key} className="builder-item stack">
+                <div className="grid-2-tight">
+                  <div className="field">
+                    <label htmlFor={`r-out-${r.key}`} className="form-label">Output name</label>
+                    <input id={`r-out-${r.key}`} className="form-control mono" value={r.outputId} onChange={(e) => updateRule(r.key, { outputId: e.target.value })} />
+                  </div>
+                  <div className="field">
+                    <label htmlFor={`r-label-${r.key}`} className="form-label">Display label</label>
+                    <input id={`r-label-${r.key}`} className="form-control" value={r.label} onChange={(e) => updateRule(r.key, { label: e.target.value })} />
                   </div>
                 </div>
-              ))}
-            </div>
-
-            {/* Formula Expression Builder */}
-            <div className="glass-card">
-              <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: '#fff', marginBottom: '1rem' }}>Mathematical Formula Rules</h3>
-              <div style={{ marginBottom: '1rem' }}>
-                <label className="form-label">Target Output Name (Variable)</label>
-                <input
-                  type="text"
-                  className="form-control"
-                  value={outputId}
-                  onChange={(e) => setOutputId(e.target.value)}
-                />
-              </div>
-              <div>
-                <label className="form-label">Formula Expression (Go Engine Evaluated)</label>
-                <input
-                  type="text"
-                  className="form-control"
-                  placeholder="(principal * annual_rate) / 100"
-                  value={expression}
-                  onChange={(e) => setExpression(e.target.value)}
-                  required
-                />
-                <p style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.35rem' }}>
-                  Use field IDs defined above (e.g., <code>principal</code>, <code>annual_rate</code>) with math operators (<code>+</code>, <code>-</code>, <code>*</code>, <code>/</code>, <code>^</code> or <code>**</code>).
-                </p>
-              </div>
-            </div>
-
-            <button type="submit" className="btn-primary" disabled={submitting} style={{ width: '100%', justifyContent: 'center', padding: '0.9rem' }}>
-              {submitting ? 'Instantiating Tool in Database...' : '🚀 Save & Instantiate Calculator Tool'}
-            </button>
-          </div>
-
-          {/* Right Column: Real-Time Visual Tool Form Preview */}
-          <div>
-            <div className="glass-card" style={{ border: '1px dashed #6366f1', position: 'sticky', top: '100px' }}>
-              <span className="badge-status badge-active" style={{ marginBottom: '1rem' }}>Live Tool Form Preview</span>
-              <h3 style={{ fontSize: '1.5rem', fontWeight: 700, color: '#ffffff', marginBottom: '0.25rem' }}>
-                {name || 'Untitled Tool Preview'}
-              </h3>
-              <p style={{ color: '#94a3b8', fontSize: '0.9rem', marginBottom: '1.5rem' }}>
-                {description || 'Preview of live input controls...'}
-              </p>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '1.5rem' }}>
-                {fields.map((f, i) => (
-                  <div key={i} style={{ background: '#0d1322', padding: '0.9rem', borderRadius: '0.5rem', border: '1px solid #23304d' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
-                      <span style={{ fontSize: '0.85rem', color: '#94a3b8' }}>{f.label || f.id}</span>
-                      <span style={{ fontSize: '0.85rem', color: '#6366f1', fontWeight: 600 }}>{f.defaultValue}</span>
-                    </div>
-                    {f.type === 'slider' ? (
-                      <input type="range" className="range-slider" readOnly value={f.defaultValue} />
-                    ) : (
-                      <div style={{ color: '#fff', fontSize: '0.9rem' }}>{f.defaultValue}</div>
-                    )}
+                <div className="field">
+                  <label htmlFor={`r-expr-${r.key}`} className="form-label">Expression</label>
+                  <input id={`r-expr-${r.key}`} className="form-control mono" value={r.expression} onChange={(e) => updateRule(r.key, { expression: e.target.value })} />
+                </div>
+                <div className="row wrap">
+                  <div className="field">
+                    <label htmlFor={`r-fmt-${r.key}`} className="form-label">Format</label>
+                    <select id={`r-fmt-${r.key}`} className="form-control form-control-sm" value={r.format} onChange={(e) => updateRule(r.key, { format: e.target.value as BuilderRule['format'] })}>
+                      <option value="number">Number</option>
+                      <option value="currency">Currency</option>
+                      <option value="percent">Percent</option>
+                    </select>
                   </div>
-                ))}
+                  {rules.length > 1 && (
+                    <button type="button" className="btn-secondary btn-sm align-end" onClick={() => setRules((prev) => prev.filter((x) => x.key !== r.key))}>
+                      Remove formula {i + 1}
+                    </button>
+                  )}
+                </div>
               </div>
+            ))}
+            <button
+              type="button"
+              className="btn-secondary btn-sm align-start"
+              onClick={() => setRules((prev) => [...prev, { key: newKey(), outputId: `result_${prev.length + 1}`, label: '', expression: '', format: 'number' }])}
+            >
+              <Icon name="plus" size={15} /> Add formula
+            </button>
+          </fieldset>
 
-              <div style={{ background: '#090d16', padding: '1rem', borderRadius: '0.5rem', border: '1px solid #23304d' }}>
-                <p style={{ color: '#94a3b8', fontSize: '0.75rem', textTransform: 'uppercase' }}>Formula Rule</p>
-                <p style={{ color: '#34d399', fontWeight: 600, fontSize: '0.9rem', fontFamily: 'monospace', marginTop: '0.25rem' }}>
-                  {outputId} = {expression}
-                </p>
-              </div>
-            </div>
-          </div>
+          <button type="submit" className="btn-accent btn-block" disabled={submitting}>
+            <Icon name="check" size={16} />
+            {submitting ? 'Creating tool…' : 'Create tool'}
+          </button>
         </div>
+
+        <aside className="card stack sticky" aria-label="Preview">
+          <span className="badge-status badge-accent align-start">Live preview</span>
+          <h2 className="section-title">{name || 'Untitled tool'}</h2>
+          {description && <p className="muted">{description}</p>}
+          {previewSections[0].fields.map((field) => (
+            <DynamicField key={field.id} idPrefix="preview" field={field} value={previewValues[field.id]} onChange={() => undefined} disabled />
+          ))}
+          <div className="stack">
+            {rules.map((r) => (
+              <code key={r.key} className="formula-preview">
+                {r.outputId || '?'} = {r.expression || '…'}
+              </code>
+            ))}
+          </div>
+        </aside>
       </form>
     </div>
   );
-};
+}

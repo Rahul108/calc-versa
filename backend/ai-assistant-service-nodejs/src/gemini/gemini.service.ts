@@ -1,6 +1,32 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
+const GEMINI_TIMEOUT_MS = 30_000;
+
+/**
+ * Parses a model reply that should be a single JSON object. JSON mode
+ * (responseMimeType=application/json) normally returns bare JSON; the fenced/
+ * embedded fallback covers models or modes that wrap it in prose.
+ */
+export function parseModelJson(text: string): Record<string, any> | null {
+  const candidates = [text.trim()];
+  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (fenced) candidates.push(fenced[1].trim());
+  const first = text.indexOf('{');
+  const last = text.lastIndexOf('}');
+  if (first !== -1 && last > first) candidates.push(text.slice(first, last + 1));
+
+  for (const candidate of candidates) {
+    try {
+      const parsed = JSON.parse(candidate);
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return parsed;
+    } catch {
+      // try the next candidate
+    }
+  }
+  return null;
+}
+
 @Injectable()
 export class GeminiService {
   private readonly logger = new Logger(GeminiService.name);
@@ -27,7 +53,10 @@ export class GeminiService {
     }
 
     try {
-      const model = this.genAI.getGenerativeModel({ model: this.modelName });
+      const model = this.genAI.getGenerativeModel(
+        { model: this.modelName },
+        { timeout: GEMINI_TIMEOUT_MS },
+      );
       const systemInstruction = `You are the AI Assistant for CalcVersa, a multi-tenant platform for defining and serving account-specific calculation tools at dedicated URLs (e.g., http://localhost:3005/product?id=33).
 Your job is to answer user prompts with step-by-step instructions on how to perform operations in CalcVersa.
 CRITICAL RULE: If the user requirement cannot be fulfilled properly by CalcVersa or is outside system capabilities, respond explicitly with: "No. This operation cannot be fulfilled by CalcVersa."`;
@@ -48,7 +77,7 @@ CRITICAL RULE: If the user requirement cannot be fulfilled properly by CalcVersa
     }
 
     try {
-      const model = this.genAI.getGenerativeModel({ model: this.modelName });
+      const model = this.jsonModel();
       const systemInstruction = `You are the CalcVersa AI Feasibility & Tool Generator Analyzer.
 Your task is to convert any domain prompt (building management, mess tracking, financial tools, salary calculators) into a valid CalcVersa calculation tool schema.
 GUIDANCE FOR COMPLEX SYSTEM PROMPTS (Building Management, Mess Management, Inventory):
@@ -81,10 +110,11 @@ Output ONLY valid JSON matching this exact structure:
       const response = await result.response;
       const text = response.text();
       
-      const jsonMatch = text.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        return JSON.parse(jsonMatch[0]);
+      const parsed = parseModelJson(text);
+      if (parsed) {
+        return parsed;
       }
+      this.logger.warn('Gemini returned no parseable JSON object; using fallback');
       return this.fallbackFeasibility(prompt);
     } catch (error: any) {
       this.logger.error(`Error in Gemini feasibility analysis: ${error.message}`);
@@ -98,7 +128,7 @@ Output ONLY valid JSON matching this exact structure:
     }
 
     try {
-      const model = this.genAI.getGenerativeModel({ model: this.modelName });
+      const model = this.jsonModel();
       const systemInstruction = `You are the CalcVersa Tool Update Analyzer.
 Merge the user's modification prompt into the existing tool schema safely.
 Output ONLY valid JSON matching this exact structure:
@@ -113,10 +143,11 @@ Output ONLY valid JSON matching this exact structure:
       const response = await result.response;
       const text = response.text();
 
-      const jsonMatch = text.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        return JSON.parse(jsonMatch[0]);
+      const parsed = parseModelJson(text);
+      if (parsed) {
+        return parsed;
       }
+      this.logger.warn('Gemini returned no parseable JSON object; using fallback');
       return this.fallbackSchemaUpdate(existingApp, modificationPrompt);
     } catch (error: any) {
       this.logger.error(`Error in Gemini schema update: ${error.message}`);
@@ -124,27 +155,15 @@ Output ONLY valid JSON matching this exact structure:
     }
   }
 
-  async processOperation(action: string, prompt?: string, targetId?: string): Promise<any> {
-    this.logger.log(`Processing AI operation: ${action} for target: ${targetId || 'N/A'}`);
-    return {
-      status: 'success',
-      action,
-      targetId,
-      message: `Operation '${action}' executed successfully.`,
-    };
-  }
-
-  async generateReport(reportType: string = 'usage_summary'): Promise<any> {
-    return {
-      reportType,
-      generatedAt: new Date().toISOString(),
-      summary: {
-        totalToolsCreated: 12,
-        activeCalculationsExecuted: 1450,
-        resolvedIssues: 8,
-        systemStatus: 'Healthy',
+  /** Model configured for JSON mode, so replies are a bare JSON document. */
+  private jsonModel() {
+    return this.genAI!.getGenerativeModel(
+      {
+        model: this.modelName,
+        generationConfig: { responseMimeType: 'application/json', temperature: 0.2 },
       },
-    };
+      { timeout: GEMINI_TIMEOUT_MS },
+    );
   }
 
   private fallbackFeasibility(prompt: string): any {

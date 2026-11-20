@@ -26,6 +26,10 @@ export class UsersNAppMapping {
   @Column({ default: true })
   status!: boolean;
 
+  /** Exactly one mapping per app is the owner: can share, change permissions and delete the app. */
+  @Column({ default: false })
+  is_owner!: boolean;
+
   @CreateDateColumn()
   created_at!: Date;
 

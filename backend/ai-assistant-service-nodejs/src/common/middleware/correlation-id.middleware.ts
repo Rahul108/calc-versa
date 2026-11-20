@@ -1,21 +1,17 @@
 import { Injectable, NestMiddleware } from '@nestjs/common';
 import { Request, Response, NextFunction } from 'express';
-import { randomUUID } from 'crypto';
+import { CORRELATION_ID_HEADER, resolveCorrelationId } from '../observability';
 
-export const CORRELATION_ID_HEADER = 'x-correlation-id';
+export { CORRELATION_ID_HEADER };
 
+/** Assigns every request a correlation id (reusing a safe incoming one) and echoes it back. */
 @Injectable()
 export class CorrelationIdMiddleware implements NestMiddleware {
   use(req: Request, res: Response, next: NextFunction) {
-    const correlationId =
-      (req.headers[CORRELATION_ID_HEADER] as string) ||
-      (req.headers['x-request-id'] as string) ||
-      randomUUID();
-
+    const correlationId = resolveCorrelationId(req.headers);
     req.headers[CORRELATION_ID_HEADER] = correlationId;
+    req.correlationId = correlationId;
     res.setHeader(CORRELATION_ID_HEADER, correlationId);
-    (req as any).correlationId = correlationId;
-
     next();
   }
 }

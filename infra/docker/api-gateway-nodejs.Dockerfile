@@ -5,6 +5,7 @@ WORKDIR /app
 # Copy shared library dependencies and package files
 COPY package*.json ./
 COPY libs/db ./libs/db
+COPY libs/observability ./libs/observability
 COPY backend/api-gateway-nodejs/package*.json ./backend/api-gateway-nodejs/
 
 WORKDIR /app/backend/api-gateway-nodejs

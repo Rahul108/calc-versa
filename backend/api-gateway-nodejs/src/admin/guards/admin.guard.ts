@@ -8,7 +8,8 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { User } from '../../../../../libs/db/src';
+import { User } from '../../db';
+import { getJwtSecret } from '../../common/config/jwt.config';
 
 @Injectable()
 export class AdminGuard implements CanActivate {
@@ -29,7 +30,7 @@ export class AdminGuard implements CanActivate {
     const token = authHeader.split(' ')[1];
     try {
       const payload = this.jwtService.verify(token, {
-        secret: process.env.JWT_SECRET || 'calcversa_secret_jwt_key_2026',
+        secret: getJwtSecret(),
       });
 
       const user = await this.userRepository.findOne({ where: { id: payload.sub } });
@@ -41,7 +42,7 @@ export class AdminGuard implements CanActivate {
         throw new ForbiddenException('Access denied: Super-Admin privileges required');
       }
 
-      request.user = user;
+      request.user = { id: user.id, username: user.username, email: user.email };
       return true;
     } catch (err) {
       if (err instanceof ForbiddenException || err instanceof UnauthorizedException) {

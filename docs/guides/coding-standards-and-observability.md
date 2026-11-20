@@ -9,7 +9,14 @@ Every microservice in **CalcVersa** (regardless of language or stack: Node.js, G
 Each microservice maintains a local `logs/` folder (strictly ignored in `.gitignore`) and outputs logs to two daily rotating files:
 
 1. **`logs/app-YYYY-MM-DD.log`**: Contains all log entries (`INFO`, `WARN`, `ERROR`, `DEBUG`).
-2. **`logs/error-YYYY-MM-DD.log`**: Contains exclusively `ERROR` level log entries.
+2. **`logs/error-YYYY-MM-DD.log`**: Contains failed requests (`ERROR` for 5xx, `WARN` for 4xx).
+
+**Node.js services** use the shared, framework-free library `libs/observability` (`LogWriter`, `resolveCorrelationId`, `buildAccessLog`, `buildErrorLog`, `buildErrorResponse`). Each service only keeps thin NestJS wrappers in `src/common/` (middleware, interceptor, exception filter, `observability.ts` with its `SERVICE_NAME`). Rules:
+- File writes are asynchronous (buffered streams); never use `fs.*Sync` on the request path.
+- `LOG_TO_FILE=false` disables files (stdout/stderr only), e.g. in containers that ship stdout.
+- Stack traces are logged for 5xx only; 4xx are expected outcomes logged as `WARN` without a stack.
+- Unexpected (non-HTTP) exceptions are logged in full but returned to clients as a generic `500 Internal server error`.
+- Incoming `x-correlation-id` / `x-request-id` values are reused only if they are at most 128 characters of `[A-Za-z0-9._:-]`; otherwise a new UUID is issued.
 
 Additionally, structured JSON logs must continue streaming to `stdout`/`stderr` for container orchestration (Docker / Kubernetes).
 
@@ -80,8 +87,8 @@ All HTTP microservices must format unhandled errors using this JSON payload stru
 
 | Microservice | Technology | Console Output | Rotational Log Files (`logs/`) |
 | :--- | :--- | :--- | :--- |
-| **`api-gateway-nodejs`** | Node.js / NestJS | JSON `stdout`/`stderr` | `FileLogger` -> `app-YYYY-MM-DD.log` & `error-YYYY-MM-DD.log` |
-| **`ai-assistant-service-nodejs`** | Node.js / NestJS | JSON `stdout`/`stderr` | `FileLogger` -> `app-YYYY-MM-DD.log` & `error-YYYY-MM-DD.log` |
+| **`api-gateway-nodejs`** | Node.js / NestJS | JSON `stdout`/`stderr` | `libs/observability` `LogWriter` -> `app-YYYY-MM-DD.log` & `error-YYYY-MM-DD.log` |
+| **`ai-assistant-service-nodejs`** | Node.js / NestJS | JSON `stdout`/`stderr` | `libs/observability` `LogWriter` -> `app-YYYY-MM-DD.log` & `error-YYYY-MM-DD.log` |
 | **`compute-service-golang`** | Go 1.22 / Fiber | JSON `stdout` | `RotationalFileWriter` -> `app-YYYY-MM-DD.log` & `error-YYYY-MM-DD.log` |
 | **`analysis-service-python`** | Python / FastAPI | JSON `stdout` | `TimedRotatingFileHandler` -> `app-YYYY-MM-DD.log` & `error-YYYY-MM-DD.log` |
 

@@ -12,6 +12,12 @@ RUN npm install --legacy-peer-deps
 # Copy full monorepo source code
 COPY . .
 
+# API base URLs are inlined into the bundle at build time (see frontend/src/app/config).
+ARG VITE_API_GATEWAY_URL=http://localhost:3005
+ARG VITE_AI_ASSISTANT_URL=http://localhost:3006
+ENV VITE_API_GATEWAY_URL=$VITE_API_GATEWAY_URL \
+    VITE_AI_ASSISTANT_URL=$VITE_AI_ASSISTANT_URL
+
 # Build React SPA production assets
 RUN npx nx build frontend
 
