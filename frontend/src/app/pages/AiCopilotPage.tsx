@@ -131,7 +131,7 @@ export default function AiCopilotPage() {
           <div className="grid-2">
             <div className="stack">
               <h3 className="form-label">Inputs</h3>
-              <ul className="breakdown-list">
+              <ul className="field-list">
                 {fields.map((f) => (
                   <li key={f.id}>
                     <span>
